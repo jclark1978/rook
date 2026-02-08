@@ -7,9 +7,11 @@ export type GameSettings = {
   rookRankMode: RookRankMode;
 };
 
-// Placeholder exports. Next step is implementing the full rules engine.
 export const DEFAULT_SETTINGS: GameSettings = {
   targetScore: 700,
   deckMode: 'full',
   rookRankMode: 'rookHigh',
 };
+
+export * from './cards.js';
+export * from './deck.js';
