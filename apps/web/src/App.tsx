@@ -424,10 +424,19 @@ function App() {
     [handPrivate],
   )
 
-  const trickCards = useMemo(
-    () => normalizeCards(handState?.trickCards),
-    [handState],
-  )
+  const trickCards = useMemo(() => {
+    const raw = handState?.trickCards
+    if (!Array.isArray(raw)) return []
+    // Server sends trickCards as [{seat, card}...]. Accept either that shape or raw Card[]
+    const cardsOnly = raw
+      .map((entry) => {
+        if (entry && typeof entry === 'object' && 'card' in (entry as any)) {
+          return (entry as any).card
+        }
+        return entry
+      })
+    return normalizeCards(cardsOnly)
+  }, [handState])
 
   const selectedDiscardCards = useMemo(() => {
     if (!selectedDiscards.length) return []
