@@ -5,7 +5,7 @@ import { Server } from 'socket.io';
 import { RoomStore, type RoomState } from './rooms.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
-const ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+const ORIGIN = process.env.CORS_ORIGIN ?? [/^http:\/\/localhost:5173$/, /^http:\/\/skippy\.theclarks\.home:5173$/];
 
 const app = express();
 app.use(cors({ origin: ORIGIN, credentials: true }));

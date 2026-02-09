@@ -45,7 +45,11 @@ function App() {
   const socketRef = useRef<Socket | null>(null)
 
   useEffect(() => {
-    const socket: Socket = io('http://localhost:3001', {
+    // If you open the web UI from another device, `localhost` would point at *that* device.
+    // So we connect back to the same host serving this page.
+    const serverUrl = `${window.location.protocol}//${window.location.hostname}:3001`
+
+    const socket: Socket = io(serverUrl, {
       autoConnect: true,
     })
 
