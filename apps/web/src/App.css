@@ -571,6 +571,58 @@ button.not-ready {
   gap: 0.6rem;
 }
 
+.hand-sorted {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.hand-rook-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hand-rook-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.6rem;
+}
+
+.hand-columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+@media (max-width: 700px) {
+  .hand-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.hand-column {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 1rem;
+  padding: 0.65rem;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.hand-column-title {
+  margin: 0 0 0.5rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.hand-column-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+}
+
 .card-pill {
   display: flex;
   align-items: center;

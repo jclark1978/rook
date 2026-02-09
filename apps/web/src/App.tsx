@@ -153,6 +153,58 @@ const cardKey = (card: Card): string =>
 const cardLabel = (card: Card): string =>
   card.kind === 'rook' ? 'ROOK' : `${COLOR_LABELS[card.color]} ${card.rank}`
 
+const sortRankValue = (card: Card): number => {
+  if (card.kind === 'rook') return 999
+  // 1 is highest, then 14..2
+  if (card.rank === 1) return 998
+  return card.rank
+}
+
+const sortCardsHighToLow = (cards: Card[]): Card[] =>
+  cards
+    .slice()
+    .sort((a, b) => {
+      const av = sortRankValue(a)
+      const bv = sortRankValue(b)
+      return bv - av
+    })
+
+type RenderCardOptions = {
+  selectable?: boolean
+  clickable?: boolean
+  onClick?: (card: Card) => void
+}
+
+type HandColumns = {
+  rookCards: Card[]
+  columns: Array<{ color: TrumpColor; label: string; cards: Card[] }>
+}
+
+const buildHandColumns = (cards: Card[]): HandColumns => {
+  const rookCards = cards.filter((card) => card.kind === 'rook')
+  const suited = cards.filter((card) => card.kind === 'suit') as Extract<Card, { kind: 'suit' }>[]
+
+  const byColor: Record<TrumpColor, Card[]> = {
+    red: [],
+    black: [],
+    yellow: [],
+    green: [],
+  }
+
+  for (const card of suited) {
+    byColor[card.color].push(card)
+  }
+
+  const columns: Array<{ color: TrumpColor; label: string; cards: Card[] }> = [
+    { color: 'red', label: 'Red', cards: sortCardsHighToLow(byColor.red) },
+    { color: 'black', label: 'Black', cards: sortCardsHighToLow(byColor.black) },
+    { color: 'yellow', label: 'Yellow', cards: sortCardsHighToLow(byColor.yellow) },
+    { color: 'green', label: 'Green', cards: sortCardsHighToLow(byColor.green) },
+  ]
+
+  return { rookCards, columns }
+}
+
 function App() {
   const [view, setView] = useState<View>('home')
   const [roomCode, setRoomCode] = useState('')
@@ -723,6 +775,56 @@ function App() {
     )
   }
 
+  const renderHandBySuit = (cards: Card[], options?: RenderCardOptions) => {
+    const { rookCards, columns } = buildHandColumns(cards)
+
+    return (
+      <div className="hand-sorted">
+        {rookCards.length ? (
+          <div className="hand-rook-row">
+            <p className="meta-label">Rook</p>
+            <div className="hand-rook-cards">
+              {rookCards.map((card) =>
+                renderCardPill(
+                  card,
+                  options?.selectable ?? false,
+                  options?.clickable ?? false,
+                  options?.onClick,
+                ),
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="hand-columns" role="list">
+          {columns.map((col) => (
+            <div
+              key={col.color}
+              className={`hand-column hand-${col.color}`}
+              role="listitem"
+            >
+              <p className="hand-column-title">{col.label}</p>
+              <div className="hand-column-cards">
+                {col.cards.length ? (
+                  col.cards.map((card) =>
+                    renderCardPill(
+                      card,
+                      options?.selectable ?? false,
+                      options?.clickable ?? false,
+                      options?.onClick,
+                    ),
+                  )
+                ) : (
+                  <p className="empty-state">—</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   const renderSeatStrip = () => (
     <div className="seat-strip" aria-label="Table seats">
       {seats.map((seat) => {
@@ -990,13 +1092,11 @@ function App() {
 
             <div className="bidding-card hand-card">
               <p className="eyebrow">Your Hand</p>
-              <div className="card-grid">
-                {handCards.length ? (
-                  handCards.map((card) => renderCardPill(card, false))
-                ) : (
-                  <p className="empty-state">Waiting for deal...</p>
-                )}
-              </div>
+              {handCards.length ? (
+                renderHandBySuit(handCards)
+              ) : (
+                <p className="empty-state">Waiting for deal...</p>
+              )}
             </div>
 
             <div className="bidding-card bidding-history">
@@ -1214,23 +1314,22 @@ function App() {
 
             <div className="bidding-card hand-card">
               <p className="eyebrow">Your Hand</p>
-              <div className="card-grid">
-                {handCards.length ? (
-                  handCards.map((card) => {
-                    const isTrickTurn =
-                      activePhase === 'trick' &&
-                      mySeat?.id &&
-                      handState?.whoseTurnSeat === mySeat.id
-                    return isBidder && activePhase === 'kitty'
-                      ? renderCardPill(card, true)
-                      : isTrickTurn
-                        ? renderCardPill(card, false, true, emitPlayCard)
-                        : renderCardPill(card, false)
+              {handCards.length ? (
+                (() => {
+                  const isTrickTurn =
+                    activePhase === 'trick' &&
+                    mySeat?.id &&
+                    handState?.whoseTurnSeat === mySeat.id
+
+                  return renderHandBySuit(handCards, {
+                    selectable: isBidder && activePhase === 'kitty',
+                    clickable: Boolean(isTrickTurn),
+                    onClick: isTrickTurn ? emitPlayCard : undefined,
                   })
-                ) : (
-                  <p className="empty-state">No cards yet.</p>
-                )}
-              </div>
+                })()
+              ) : (
+                <p className="empty-state">No cards yet.</p>
+              )}
             </div>
 
             {(isBidder && activePhase === 'kitty') || kittyCards.length > 0 ? (
