@@ -37,6 +37,7 @@ type GamePassPartnerPayload = { roomCode: string };
 type KittyPickupPayload = { roomCode: string };
 type KittyDiscardPayload = { roomCode: string; cards: Card[] };
 type TrumpDeclarePayload = { roomCode: string; trump: TrumpColor };
+type PlayCardPayload = { roomCode: string; card: Card };
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_CODE_LENGTH = 4;
@@ -75,6 +76,7 @@ const toHandPublicState = (state: GameState) => ({
   ),
   kittyCount: state.hand.kitty.length,
   kittySize: state.hand.kittySize,
+  trickCards: state.hand.trickCards,
 });
 
 const emitHandState = (roomCode: string, state: GameState) => {
@@ -299,6 +301,20 @@ io.on('connection', (socket) => {
 
     emitGameState(normalizedCode, result.value);
     emitHandState(normalizedCode, result.value);
+  });
+
+  socket.on('play:card', async ({ roomCode, card }: PlayCardPayload) => {
+    const resolvedPlayerId = socket.data.playerId ?? socket.id;
+    socket.data.playerId = resolvedPlayerId;
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = games.playCard(normalizedCode, resolvedPlayerId, card);
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    emitHandState(normalizedCode, result.value);
+    await emitPrivateHands(normalizedCode, result.value);
   });
 });
 

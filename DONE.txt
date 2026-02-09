@@ -4,3 +4,7 @@ Web updates:
 - wired game:error to show the error banner alongside room:error
 - tightened kitty pickup/discard and trump declare button disables to require phase + bidder + discard selection
 - show Kitty panel when kitty cards arrive in hand:private even if not marked bidder
+
+Server trick stub:
+- Added trick play handling: state tracks trickCards, play:card validates turn/card, removes from hand, advances turn, clears trick after four cards.
+- Exposed trickCards in hand:state and added a test for play:card reducing hand size.
