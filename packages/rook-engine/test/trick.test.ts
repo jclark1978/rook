@@ -18,6 +18,11 @@ describe('trick', () => {
     ]);
   });
 
+  it('treats rook as trump for follow-suit when trump is led', () => {
+    const hand: Card[] = [{ kind: 'rook' }, { kind: 'suit', color: 'yellow', rank: 9 }];
+    expect(getLegalPlays(hand, 'black', 'black', 'rookHigh')).toEqual(['ROOK']);
+  });
+
   it('picks winner with trump and rook ranking', () => {
     const trickCards: Card[] = [
       { kind: 'suit', color: 'red', rank: 10 },

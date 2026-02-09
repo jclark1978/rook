@@ -12,14 +12,20 @@ export type TrickState = {
 export function getLegalPlays(
   hand: Card[],
   trickLeadColor: TrumpColor | undefined,
-  _trumpColor: TrumpColor,
+  trumpColor: TrumpColor,
   _rookRankMode: RookRankMode,
 ): string[] {
   if (!trickLeadColor) return hand.map(cardId);
 
-  const leadSuitCards = hand.filter(
-    (card) => card.kind === 'suit' && card.color === trickLeadColor,
-  );
+  // Must follow suit if possible.
+  // Special case: the Rook always counts as trump, so if trump is led,
+  // a player holding only the Rook (and no other trump-suit cards) is still considered
+  // able to follow suit and must play it.
+  const leadSuitCards = hand.filter((card) => {
+    if (card.kind === 'suit') return card.color === trickLeadColor;
+    if (card.kind === 'rook') return trickLeadColor === trumpColor;
+    return false;
+  });
 
   if (leadSuitCards.length > 0) return leadSuitCards.map(cardId);
   return hand.map(cardId);
