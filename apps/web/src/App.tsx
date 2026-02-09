@@ -164,6 +164,7 @@ function App() {
   const [handState, setHandState] = useState<HandPublicState | null>(null)
   const [handPrivate, setHandPrivate] = useState<HandPrivateState | null>(null)
   const [playerId, setPlayerId] = useState('')
+  const stablePlayerIdRef = useRef<string>('')
   const [errorMessage, setErrorMessage] = useState('')
   const [customBid, setCustomBid] = useState('')
   const [selectedDiscards, setSelectedDiscards] = useState<string[]>([])
@@ -179,8 +180,14 @@ function App() {
     // So we connect back to the same host serving this page.
     const serverUrl = `${window.location.protocol}//${window.location.hostname}:3001`
 
+    const stored = window.localStorage.getItem('rook:playerId')
+    const stablePlayerId = stored && stored.trim() ? stored : crypto.randomUUID()
+    window.localStorage.setItem('rook:playerId', stablePlayerId)
+    stablePlayerIdRef.current = stablePlayerId
+
     const socket: Socket = io(serverUrl, {
       autoConnect: true,
+      auth: { playerId: stablePlayerId },
     })
 
     socketRef.current = socket
@@ -188,8 +195,9 @@ function App() {
 
     const handleConnect = () => {
       setConnectionStatus('connected')
-      if (socket.id) {
-        setPlayerId(socket.id)
+      // Use a stable player id so a server restart / reconnect does not "unseat" you.
+      if (stablePlayerIdRef.current) {
+        setPlayerId(stablePlayerIdRef.current)
       }
     }
     const handleDisconnect = () => setConnectionStatus('disconnected')
@@ -291,16 +299,20 @@ function App() {
       return
     }
     setErrorMessage('')
-    socket.emit('room:create', {}, (response: RoomAck) => {
-      if (response?.ok) {
-        setRoomCode(response.roomCode)
-        setPlayerId(response.playerId)
-        setRoomState(response.state)
-        setView('lobby')
-      } else if (response?.message) {
-        setErrorMessage(response.message)
-      }
-    })
+    socket.emit(
+      'room:create',
+      { playerId: stablePlayerIdRef.current },
+      (response: RoomAck) => {
+        if (response?.ok) {
+          setRoomCode(response.roomCode)
+          setPlayerId(response.playerId)
+          setRoomState(response.state)
+          setView('lobby')
+        } else if (response?.message) {
+          setErrorMessage(response.message)
+        }
+      },
+    )
   }
 
   const handleJoinRoom = () => {
@@ -312,7 +324,10 @@ function App() {
       return
     }
     setErrorMessage('')
-    socket.emit('room:join', { roomCode: trimmed }, (response: RoomAck) => {
+    socket.emit(
+      'room:join',
+      { roomCode: trimmed, playerId: stablePlayerIdRef.current },
+      (response: RoomAck) => {
       if (response?.ok) {
         setRoomCode(response.roomCode)
         setPlayerId(response.playerId)

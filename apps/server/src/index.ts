@@ -21,7 +21,7 @@ const io = new Server(httpServer, {
 });
 
 type RoomCreatePayload = { roomCode?: string; playerId?: string };
-type RoomJoinPayload = { roomCode: string };
+type RoomJoinPayload = { roomCode: string; playerId?: string };
 type RoomSitPayload = { roomCode: string; seat: string };
 type RoomReadyPayload = { roomCode: string; ready: boolean };
 type RoomAck =
@@ -116,6 +116,11 @@ const emitPrivateHands = async (roomCode: string, state: GameState) => {
 };
 
 io.on('connection', (socket) => {
+  const authPlayerId = (socket.handshake.auth as { playerId?: unknown } | undefined)?.playerId;
+  if (typeof authPlayerId === 'string' && authPlayerId.trim()) {
+    socket.data.playerId = authPlayerId;
+  }
+
   socket.emit('server:hello', { ok: true, serverTime: Date.now() });
 
   socket.on('client:ping', () => {
@@ -125,7 +130,7 @@ io.on('connection', (socket) => {
   socket.on(
     'room:create',
     ({ roomCode, playerId }: RoomCreatePayload, ack?: (payload: RoomAck) => void) => {
-      const resolvedPlayerId = playerId ?? socket.id;
+      const resolvedPlayerId = socket.data.playerId ?? playerId ?? socket.id;
       socket.data.playerId = resolvedPlayerId;
       const requestedCode = roomCode?.trim().toUpperCase();
 
@@ -160,10 +165,12 @@ io.on('connection', (socket) => {
     },
   );
 
-  socket.on('room:join', ({ roomCode }: RoomJoinPayload, ack?: (payload: RoomAck) => void) => {
-    const resolvedPlayerId = socket.data.playerId ?? socket.id;
-    socket.data.playerId = resolvedPlayerId;
-    const result = rooms.joinRoom(roomCode.trim().toUpperCase(), resolvedPlayerId);
+  socket.on(
+    'room:join',
+    ({ roomCode, playerId }: RoomJoinPayload, ack?: (payload: RoomAck) => void) => {
+      const resolvedPlayerId = socket.data.playerId ?? playerId ?? socket.id;
+      socket.data.playerId = resolvedPlayerId;
+      const result = rooms.joinRoom(roomCode.trim().toUpperCase(), resolvedPlayerId);
     if (!result.ok) {
       socket.emit('room:error', { message: result.error });
       ack?.({ ok: false, message: result.error });
