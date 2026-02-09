@@ -127,6 +127,18 @@
   gap: 1.5rem;
 }
 
+.error-banner {
+  padding: 0.85rem 1.2rem;
+  border-radius: 1rem;
+  border: 3px solid var(--border-strong);
+  background: #f7e2d6;
+  color: #5a2311;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-cutout);
+}
+
 button,
 input {
   font-family: inherit;
@@ -272,6 +284,32 @@ button.ghost {
   font-size: 0.9rem;
 }
 
+.seat-occupant {
+  margin: 0.35rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.seat-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+
+.seat-actions button {
+  min-width: 9rem;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 6px 0 rgba(23, 19, 18, 0.65);
+}
+
 button.ready {
   background: var(--accent);
   color: var(--surface-strong);
@@ -294,6 +332,11 @@ button.not-ready {
   .seat-card {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .seat-actions {
+    align-items: flex-start;
+    width: 100%;
   }
 
   .lobby-header {
