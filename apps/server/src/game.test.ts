@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { scoreHand } from '@rook/engine/src/scoring.js';
 import { createGameState, GameStore, reduceGameState } from './game.js';
 import { type Seat } from './rooms.js';
 
@@ -257,5 +258,105 @@ describe('Game reducer', () => {
     if (!illegalPlay.ok) {
       expect(illegalPlay.error).toBe('illegal play');
     }
+  });
+
+  it('scores a set hand when the bidding team misses', () => {
+    const createResult = createGameState('ROOM7', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    const store = new GameStore();
+    const kittyCards = [suitCard('red', 10), suitCard('black', 5)];
+    const trickCards = [
+      suitCard('yellow', 9),
+      suitCard('yellow', 5),
+      suitCard('yellow', 10),
+      suitCard('yellow', 14),
+    ];
+
+    (store as { games: Map<string, { state: typeof state }> }).games.set('ROOM7', {
+      state: {
+        ...state,
+        phase: 'trick',
+        whoseTurnSeat: state.seatOrder[0],
+        whoseTurnPlayerId: state.playerOrder[0],
+        hand: {
+          ...state.hand,
+          phase: 'trick',
+          trump: 'black',
+          trickCards: [],
+          trickLeadColor: undefined,
+          hands: [[trickCards[0]], [trickCards[1]], [trickCards[2]], [trickCards[3]]],
+          kitty: kittyCards,
+          bidder: 0,
+          winningBid: { player: 0, amount: 120 },
+          capturedByTeam: [[], []],
+          lastTrickTeam: null,
+        },
+        gameScore: [0, 0],
+      },
+    });
+
+    store.playCard('ROOM7', state.playerOrder[0], trickCards[0]);
+    store.playCard('ROOM7', state.playerOrder[1], trickCards[1]);
+    store.playCard('ROOM7', state.playerOrder[2], trickCards[2]);
+    const finalPlay = store.playCard('ROOM7', state.playerOrder[3], trickCards[3]);
+    expect(finalPlay.ok).toBe(true);
+    if (!finalPlay.ok) return;
+
+    const expected = scoreHand([[], trickCards], 1, kittyCards, 0, 120);
+    expect(finalPlay.value.phase).toBe('score');
+    expect(finalPlay.value.gameScore).toEqual(expected.scores);
+  });
+
+  it('scores a made hand with the bidding team points', () => {
+    const createResult = createGameState('ROOM8', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    const store = new GameStore();
+    const kittyCards = [suitCard('red', 10)];
+    const trickCards = [
+      suitCard('red', 5),
+      suitCard('yellow', 9),
+      suitCard('black', 10),
+      suitCard('green', 1),
+    ];
+
+    (store as { games: Map<string, { state: typeof state }> }).games.set('ROOM8', {
+      state: {
+        ...state,
+        phase: 'trick',
+        whoseTurnSeat: state.seatOrder[0],
+        whoseTurnPlayerId: state.playerOrder[0],
+        hand: {
+          ...state.hand,
+          phase: 'trick',
+          trump: 'red',
+          trickCards: [],
+          trickLeadColor: undefined,
+          hands: [[trickCards[0]], [trickCards[1]], [trickCards[2]], [trickCards[3]]],
+          kitty: kittyCards,
+          bidder: 0,
+          winningBid: { player: 0, amount: 40 },
+          capturedByTeam: [[], []],
+          lastTrickTeam: null,
+        },
+        gameScore: [0, 0],
+      },
+    });
+
+    store.playCard('ROOM8', state.playerOrder[0], trickCards[0]);
+    store.playCard('ROOM8', state.playerOrder[1], trickCards[1]);
+    store.playCard('ROOM8', state.playerOrder[2], trickCards[2]);
+    const finalPlay = store.playCard('ROOM8', state.playerOrder[3], trickCards[3]);
+    expect(finalPlay.ok).toBe(true);
+    if (!finalPlay.ok) return;
+
+    const expected = scoreHand([trickCards, []], 0, kittyCards, 0, 40);
+    expect(finalPlay.value.phase).toBe('score');
+    expect(finalPlay.value.gameScore).toEqual(expected.scores);
   });
 });
