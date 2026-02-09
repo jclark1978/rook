@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
+import rookCard from './assets/rook-card.jpg'
 import './App.css'
 
 type View = 'home' | 'lobby'
@@ -97,7 +98,9 @@ function App() {
     <div className="app-shell">
       <header className="top-bar">
         <div className="brand">
-          <span className="brand-mark">♠</span>
+          <span className="brand-mark" aria-hidden="true">
+            <img src={rookCard} alt="" />
+          </span>
           <div>
             <p className="brand-title">Rook Online</p>
             <p className="brand-subtitle">Table lobby prototype</p>

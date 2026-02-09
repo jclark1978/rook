@@ -1,26 +1,34 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Bungee&display=swap');
 
 :root {
-  font-family: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
   line-height: 1.5;
-  font-weight: 400;
-  color: #121217;
-  background-color: #f4efe9;
+  font-weight: 500;
+  color: #171312;
+  background-color: #f6f0e4;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 
-  --text-strong: #121217;
-  --text-muted: #5c5968;
-  --surface: #f7f2ed;
+  /* Rook-card vibe: paper + ink + bold primary accents */
+  --paper: #f6f0e4;
+  --paper-2: #fbf6ed;
+  --ink: #171312;
+  --ink-soft: rgba(23, 19, 18, 0.75);
+
+  --surface: color-mix(in srgb, var(--paper-2) 88%, white);
   --surface-strong: #ffffff;
-  --border: rgba(18, 18, 23, 0.12);
-  --accent: #ea6b4f;
-  --warning: #f3b43f;
-  --danger: #d14a5c;
-  --shadow-soft: 0 10px 30px rgba(18, 18, 23, 0.08);
-  --shadow-strong: 0 20px 60px rgba(18, 18, 23, 0.12);
+
+  --border: rgba(23, 19, 18, 0.22);
+  --border-strong: rgba(23, 19, 18, 0.9);
+
+  --accent: #d62828;  /* bold red */
+  --gold: #fcbf49;    /* warm yellow */
+
+  --shadow-soft: 0 10px 18px rgba(23, 19, 18, 0.10);
+  --shadow-strong: 0 18px 30px rgba(23, 19, 18, 0.16);
+  --shadow-cutout: 0 8px 0 rgba(23, 19, 18, 0.85);
 }
 
 * {
@@ -31,9 +39,25 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(234, 107, 79, 0.18), transparent 55%),
-    radial-gradient(circle at 25% 70%, rgba(243, 180, 63, 0.18), transparent 55%),
-    linear-gradient(140deg, #f4efe9 0%, #f9f7f3 100%);
+    radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--gold) 26%, transparent), transparent 50%),
+    radial-gradient(circle at 80% 20%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+}
+
+/* subtle paper grain */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-radial-gradient(circle at 0 0,
+      rgba(23, 19, 18, 0.018) 0px,
+      rgba(23, 19, 18, 0.018) 1px,
+      transparent 1px,
+      transparent 6px);
+  mix-blend-mode: multiply;
+  opacity: 0.55;
 }
 
 #root {
@@ -52,4 +76,9 @@ p {
 input {
   border: none;
   outline: none;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
 }
