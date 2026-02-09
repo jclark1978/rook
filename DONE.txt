@@ -1,10 +1,1 @@
-Updated server game state to retain picked-up kitty cards for bidder-only visibility and extended private hand payloads to include kitty cards during kitty/declareTrump phases. Added kittyPickedUpCards tracking and ensured discarded kitty is sent only to bidder after discard.
-
-Web updates:
-- wired game:error to show the error banner alongside room:error
-- tightened kitty pickup/discard and trump declare button disables to require phase + bidder + discard selection
-- show Kitty panel when kitty cards arrive in hand:private even if not marked bidder
-
-Server trick stub:
-- Added trick play handling: state tracks trickCards, play:card validates turn/card, removes from hand, advances turn, clears trick after four cards.
-- Exposed trickCards in hand:state and added a test for play:card reducing hand size.
+Added a new trickRound helper module with applyPlay/isTrickComplete/trickWinner, exported it from rook-engine, and added tests covering trump and rook high/low winner selection.

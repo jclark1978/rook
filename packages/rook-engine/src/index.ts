@@ -35,6 +35,7 @@ export type {
   PlayerId,
 } from './bidding.js';
 export * from './trick.js';
+export * from './trickRound.js';
 export * from './scoring.js';
 export * from './state.js';
 export * from './hand.js';
