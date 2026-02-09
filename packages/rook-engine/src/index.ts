@@ -16,3 +16,4 @@ export const DEFAULT_SETTINGS: GameSettings = {
 export * from './cards.js';
 export * from './deck.js';
 export * from './bidding.js';
+export * from './scoring.js';
