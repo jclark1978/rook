@@ -7,7 +7,6 @@ import {
   isBiddingComplete,
   type PlayerId,
   teamOf,
-  type TeamId,
 } from '@rook/engine/src/bidding.js';
 import type { Card } from '@rook/engine/src/cards.js';
 import { cardId, isPointCard } from '@rook/engine/src/cards.js';
@@ -31,12 +30,15 @@ export type HandState = {
   hands: Card[][];
   trickCards: Array<{ seat: Seat; card: Card }>;
   trickLeadColor?: TrumpColor;
-  capturedByTeam: [Card[], Card[]];
-  lastTrickTeam: TeamId | null;
   bidder: PlayerId | null;
   winningBid: Bid | null;
   trump?: TrumpColor;
   kittyPickedUp: boolean;
+  capturedByTeam: [Card[], Card[]];
+  lastTrickTeam: 0 | 1 | null;
+  handPoints: [number, number] | null;
+  handScores: [number, number] | null;
+  biddersSet: boolean | null;
 };
 
 export type GameState = {
@@ -48,7 +50,8 @@ export type GameState = {
   hand: HandState;
   whoseTurnSeat: Seat;
   whoseTurnPlayerId: string;
-  gameScore: [number, number];
+  scores: [number, number];
+  dealerIndex: PlayerId;
 };
 
 export type GameStartSettings = {
@@ -138,11 +141,8 @@ export const createGameState = (
 
   const playerOrder = orderResult.value;
   const seatOrder = getSeatOrder();
-  const bidding = createBiddingState(
-    settings?.startingPlayer ?? 0,
-    settings?.minBid,
-    settings?.step,
-  );
+  const dealerIndex = settings?.startingPlayer ?? 0;
+  const bidding = createBiddingState(dealerIndex, settings?.minBid, settings?.step);
   const startedAt = Date.now();
   const deckMode = settings?.deckMode ?? 'full';
   const { hands, kitty, seed } = dealHands(roomCode, startedAt, deckMode);
@@ -158,11 +158,14 @@ export const createGameState = (
     hands,
     trickCards: [],
     trickLeadColor: undefined,
-    capturedByTeam: [[], []],
-    lastTrickTeam: null,
     bidder: null,
     winningBid: null,
     kittyPickedUp: false,
+    capturedByTeam: [[], []],
+    lastTrickTeam: null,
+    handPoints: null,
+    handScores: null,
+    biddersSet: null,
   };
   const currentPlayerSeat = seatOrder[bidding.currentPlayer];
   const currentPlayerId = playerOrder[bidding.currentPlayer];
@@ -178,7 +181,8 @@ export const createGameState = (
       hand,
       whoseTurnSeat: currentPlayerSeat,
       whoseTurnPlayerId: currentPlayerId,
-      gameScore: [0, 0],
+      scores: [0, 0],
+      dealerIndex,
     },
   };
 };
@@ -459,10 +463,11 @@ export class GameStore {
     let trickLeadColor = nextLeadColor;
     let whoseTurnSeat = state.whoseTurnSeat;
     let whoseTurnPlayerId = state.whoseTurnPlayerId;
-    let capturedByTeam = state.hand.capturedByTeam;
+    let capturedByTeam = [
+      state.hand.capturedByTeam[0].slice(),
+      state.hand.capturedByTeam[1].slice(),
+    ] as [Card[], Card[]];
     let lastTrickTeam = state.hand.lastTrickTeam;
-    let phase: GamePhase = state.phase;
-    let gameScore = state.gameScore;
 
     if (nextTrickCards.length >= state.seatOrder.length) {
       const winnerCardIndex = determineTrickWinner(
@@ -475,36 +480,51 @@ export class GameStore {
         nextTrickCards[winnerCardIndex]?.seat ?? state.seatOrder[playerIndex];
       const winnerIndex = state.seatOrder.indexOf(winnerSeat);
       const resolvedIndex = winnerIndex === -1 ? playerIndex : winnerIndex;
+      const winningTeam = teamOf(resolvedIndex);
+      capturedByTeam[winningTeam] = [
+        ...capturedByTeam[winningTeam],
+        ...nextTrickCards.map((entry) => entry.card),
+      ];
+      lastTrickTeam = winningTeam;
       whoseTurnSeat = state.seatOrder[resolvedIndex];
       whoseTurnPlayerId = state.playerOrder[resolvedIndex];
       trickCards = [];
       trickLeadColor = undefined;
-      const winnerTeam = teamOf(resolvedIndex as PlayerId);
-      capturedByTeam = [
-        [...state.hand.capturedByTeam[0]],
-        [...state.hand.capturedByTeam[1]],
-      ];
-      capturedByTeam[winnerTeam].push(...nextTrickCards.map((entry) => entry.card));
-      lastTrickTeam = winnerTeam;
-
-      const handComplete = hands.every((hand) => hand.length === 0);
-      if (handComplete && state.hand.winningBid && state.hand.bidder !== null) {
-        const biddingTeam = teamOf(state.hand.bidder);
-        const bidAmount = state.hand.winningBid.amount;
-        const { scores } = scoreHand(
-          capturedByTeam,
-          lastTrickTeam,
-          state.hand.kitty,
-          biddingTeam,
-          bidAmount,
-        );
-        gameScore = [gameScore[0] + scores[0], gameScore[1] + scores[1]];
-        phase = 'score';
-      }
     } else {
       const nextIndex = (playerIndex + 1) % state.seatOrder.length;
       whoseTurnSeat = state.seatOrder[nextIndex];
       whoseTurnPlayerId = state.playerOrder[nextIndex];
+    }
+
+    const handComplete =
+      nextTrickCards.length >= state.seatOrder.length &&
+      hands.every((hand) => hand.length === 0);
+
+    let phase: GamePhase = state.phase;
+    let handPhase: GamePhase = state.hand.phase;
+    let scores = state.scores;
+    let handPoints = state.hand.handPoints;
+    let handScores = state.hand.handScores;
+    let biddersSet = state.hand.biddersSet;
+
+    if (handComplete) {
+      const winningBid = state.hand.winningBid;
+      const bidAmount = winningBid?.amount ?? 0;
+      const biddingTeam = winningBid ? teamOf(winningBid.player) : 0;
+      const resolvedLastTrickTeam = lastTrickTeam ?? biddingTeam;
+      const scored = scoreHand(
+        capturedByTeam,
+        resolvedLastTrickTeam,
+        state.hand.kitty,
+        biddingTeam,
+        bidAmount,
+      );
+      scores = [scores[0] + scored.scores[0], scores[1] + scored.scores[1]];
+      handPoints = scored.points;
+      handScores = scored.scores;
+      biddersSet = scored.points[biddingTeam] < bidAmount;
+      phase = 'score';
+      handPhase = 'score';
     }
 
     const nextState: GameState = {
@@ -512,16 +532,67 @@ export class GameStore {
       phase,
       whoseTurnSeat,
       whoseTurnPlayerId,
-      gameScore,
+      scores,
       hand: {
         ...state.hand,
-        phase,
+        phase: handPhase,
         hands,
         trickCards,
         trickLeadColor,
         capturedByTeam,
         lastTrickTeam,
+        handPoints,
+        handScores,
+        biddersSet,
       },
+    };
+
+    game.state = nextState;
+    return { ok: true, value: nextState };
+  }
+
+  nextHand(roomCode: string): GameResult<GameState> {
+    const game = this.games.get(roomCode);
+    if (!game) return { ok: false, error: 'game missing' };
+    const { state } = game;
+    if (state.phase !== 'score') return { ok: false, error: 'hand not complete' };
+
+    const dealerIndex = (((state.dealerIndex ?? 0) + 1) % 4) as PlayerId;
+    const bidding = createBiddingState(dealerIndex, state.bidding.minBid, state.bidding.step);
+    const startedAt = Date.now();
+    const deckMode = state.hand.deckMode;
+    const { hands, kitty, seed } = dealHands(roomCode, startedAt, deckMode);
+    const hand: HandState = {
+      phase: 'bidding',
+      deckMode,
+      startedAt,
+      seed,
+      kittySize: KITTY_SIZE,
+      kitty,
+      kittyPickedUpCards: [],
+      pointsNoticeSent: false,
+      hands,
+      trickCards: [],
+      trickLeadColor: undefined,
+      bidder: null,
+      winningBid: null,
+      kittyPickedUp: false,
+      capturedByTeam: [[], []],
+      lastTrickTeam: null,
+      handPoints: null,
+      handScores: null,
+      biddersSet: null,
+    };
+    const currentPlayerSeat = state.seatOrder[bidding.currentPlayer];
+    const currentPlayerId = state.playerOrder[bidding.currentPlayer];
+    const nextState: GameState = {
+      ...state,
+      phase: 'bidding',
+      bidding,
+      hand,
+      whoseTurnSeat: currentPlayerSeat,
+      whoseTurnPlayerId: currentPlayerId,
+      dealerIndex,
     };
 
     game.state = nextState;

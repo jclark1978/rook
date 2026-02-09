@@ -66,16 +66,23 @@ type GameState = {
   history?: BiddingHistoryEntry[]
   passPartnerAllowed?: boolean
   passPartnerUsed?: [boolean, boolean]
+  dealerSeat?: SeatId | null
+  gameScores?: [number, number]
 }
 
 type HandPublicState = {
   roomCode?: string
   phase?: string
+  winningBid?: { player: number; amount: number } | null
   bidderSeat?: SeatId | null
+  dealerSeat?: SeatId | null
   trump?: string | null
   kittyCount?: number
   whoseTurnSeat?: SeatId | null
   trickCards?: unknown[]
+  handPoints?: [number, number] | null
+  biddersSet?: boolean | null
+  gameScores?: [number, number]
 }
 
 type HandPrivateState = {
@@ -496,7 +503,7 @@ function App() {
       return 'Trick play underway.'
     }
     if (activePhase === 'score') {
-      return 'Scoring the hand.'
+      return 'Hand complete. Review the summary below.'
     }
     return 'Bidding in progress.'
   }, [activePhase, isBidder])
@@ -511,6 +518,10 @@ function App() {
   }, [handState])
 
   const kittyCount = handState?.kittyCount ?? kittyCards.length
+
+  const dealerSeat = handState?.dealerSeat ?? gameState?.dealerSeat ?? null
+
+  const gameScores = handState?.gameScores ?? gameState?.gameScores ?? null
 
   const emitBid = (amount: number) => {
     if (!roomCode) return
@@ -591,6 +602,17 @@ function App() {
     socket.emit('play:card', { roomCode, card })
   }
 
+  const emitNextHand = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('next:hand', { roomCode })
+  }
+
   const toggleDiscardSelection = (card: Card) => {
     const key = cardKey(card)
     setSelectedDiscards((current) => {
@@ -664,6 +686,21 @@ function App() {
       </div>
     )
   }
+
+  const renderSeatStrip = () => (
+    <div className="seat-strip" aria-label="Table seats">
+      {seats.map((seat) => {
+        const isMine = roomState?.seats?.[seat.id] === playerId
+        const isDealer = dealerSeat === seat.id
+        return (
+          <div key={seat.id} className={`seat-pill${isMine ? ' is-mine' : ''}`}>
+            <span>{seat.label}</span>
+            {isDealer ? <span className="dealer-badge">D</span> : null}
+          </div>
+        )
+      })}
+    </div>
+  )
 
   return (
     <div className="app-shell">
@@ -786,10 +823,14 @@ function App() {
               const seatReady = seatOwner
                 ? Boolean(roomState?.ready?.[seatOwner])
                 : false
+              const isDealer = dealerSeat === seat.id
               return (
                 <div key={seat.id} className="seat-card">
                   <div>
-                    <p className="seat-id">{seat.label}</p>
+                    <div className="seat-id-row">
+                      <p className="seat-id">{seat.label}</p>
+                      {isDealer ? <span className="dealer-badge">D</span> : null}
+                    </div>
                     <p className="seat-team">{seat.team}</p>
                     <p className="seat-occupant">
                       {seatOwner
@@ -839,6 +880,7 @@ function App() {
               </button>
             </div>
           </section>
+          {renderSeatStrip()}
 
           <section className="bidding-grid">
             <div className="bidding-card high-bid">
@@ -967,8 +1009,60 @@ function App() {
               </button>
             </div>
           </section>
+          {renderSeatStrip()}
 
           <section className="postbid-grid">
+            {activePhase === 'score' ? (
+              <div className="bidding-card summary-card">
+                <p className="eyebrow">Hand Summary</p>
+                <div className="summary-grid">
+                  <div>
+                    <p className="meta-label">Winning bid</p>
+                    <p className="meta-value">
+                      {handState?.winningBid
+                        ? `${handState.winningBid.amount}`
+                        : '—'}{' '}
+                      {bidderSeat ? `(${bidderSeat})` : ''}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Points captured</p>
+                    <p className="meta-value">
+                      Team One: {handState?.handPoints?.[0] ?? '—'}
+                    </p>
+                    <p className="meta-value">
+                      Team Two: {handState?.handPoints?.[1] ?? '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Bidders set</p>
+                    <p className="meta-value">
+                      {handState?.biddersSet == null
+                        ? '—'
+                        : handState.biddersSet
+                          ? 'Yes'
+                          : 'No'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Game score</p>
+                    <p className="meta-value">
+                      Team One: {gameScores?.[0] ?? '—'}
+                    </p>
+                    <p className="meta-value">
+                      Team Two: {gameScores?.[1] ?? '—'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  className="primary"
+                  onClick={emitNextHand}
+                  disabled={activePhase !== 'score'}
+                >
+                  Next Hand
+                </button>
+              </div>
+            ) : null}
             <div className="bidding-card phase-card">
               <p className="eyebrow">Phase Info</p>
               <div className="phase-meta">
@@ -979,6 +1073,10 @@ function App() {
                 <div>
                   <p className="meta-label">Bidder</p>
                   <p className="meta-value">{bidderSeat ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="meta-label">Dealer</p>
+                  <p className="meta-value">{dealerSeat ?? '—'}</p>
                 </div>
                 <div>
                   <p className="meta-label">Trump</p>
@@ -1017,40 +1115,42 @@ function App() {
               </div>
             ) : null}
 
-            {isBidder ? (
-              <div className="bidding-card action-card">
-                <p className="eyebrow">Kitty Actions</p>
-                <p className="muted">Pickup the kitty and discard five cards.</p>
-                <div className="postbid-actions">
-                  <button
-                    className="primary"
-                    onClick={emitPickupKitty}
-                    disabled={activePhase !== 'kitty' || !isBidder}
-                  >
-                    Pickup Kitty
-                  </button>
-                  <div className="discard-row">
-                    <span className="discard-count">
-                      {selectedDiscards.length}/5 selected
-                    </span>
+            {activePhase !== 'score' ? (
+              isBidder ? (
+                <div className="bidding-card action-card">
+                  <p className="eyebrow">Kitty Actions</p>
+                  <p className="muted">Pickup the kitty and discard five cards.</p>
+                  <div className="postbid-actions">
                     <button
-                      className="ghost"
-                      onClick={emitDiscardKitty}
-                      disabled={activePhase !== 'kitty' || !isBidder || !canDiscard}
+                      className="primary"
+                      onClick={emitPickupKitty}
+                      disabled={activePhase !== 'kitty' || !isBidder}
                     >
-                      Discard 5
+                      Pickup Kitty
                     </button>
+                    <div className="discard-row">
+                      <span className="discard-count">
+                        {selectedDiscards.length}/5 selected
+                      </span>
+                      <button
+                        className="ghost"
+                        onClick={emitDiscardKitty}
+                        disabled={activePhase !== 'kitty' || !isBidder || !canDiscard}
+                      >
+                        Discard 5
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="bidding-card action-card">
-                <p className="eyebrow">Waiting</p>
-                <p className="muted">{phaseStatus}</p>
-              </div>
-            )}
+              ) : (
+                <div className="bidding-card action-card">
+                  <p className="eyebrow">Waiting</p>
+                  <p className="muted">{phaseStatus}</p>
+                </div>
+              )
+            ) : null}
 
-            {isBidder ? (
+            {activePhase !== 'score' && isBidder ? (
               <div className="bidding-card action-card">
                 <p className="eyebrow">Declare Trump</p>
                 <p className="muted">Choose the trump color for this hand.</p>
