@@ -496,7 +496,7 @@ function App() {
       return
     }
     setErrorMessage('')
-    socket.emit('hand:pickup', { roomCode })
+    socket.emit('kitty:pickup', { roomCode })
   }
 
   const emitDiscardKitty = () => {
@@ -507,7 +507,7 @@ function App() {
       return
     }
     setErrorMessage('')
-    socket.emit('hand:discard', { roomCode, cards: selectedDiscardCards })
+    socket.emit('kitty:discard', { roomCode, cards: selectedDiscardCards })
   }
 
   const emitDeclareTrump = () => {
@@ -518,7 +518,7 @@ function App() {
       return
     }
     setErrorMessage('')
-    socket.emit('hand:declareTrump', { roomCode, trump: selectedTrump })
+    socket.emit('trump:declare', { roomCode, trump: selectedTrump })
   }
 
   const toggleDiscardSelection = (card: Card) => {
