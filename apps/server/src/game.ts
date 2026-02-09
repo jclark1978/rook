@@ -23,6 +23,7 @@ export type HandState = {
   seed: number;
   kittySize: number;
   kitty: Card[];
+  kittyPickedUpCards: Card[];
   hands: Card[][];
   bidder: PlayerId | null;
   winningBid: Bid | null;
@@ -138,6 +139,7 @@ export const createGameState = (
     seed,
     kittySize: KITTY_SIZE,
     kitty,
+    kittyPickedUpCards: [],
     hands,
     bidder: null,
     winningBid: null,
@@ -201,6 +203,7 @@ export const reduceGameState = (
       phase,
       winningBid,
       bidder,
+      kittyPickedUpCards: [],
       kittyPickedUp: false,
     };
   }
@@ -305,6 +308,7 @@ export class GameStore {
         ...state.hand,
         hands,
         kitty: [],
+        kittyPickedUpCards: state.hand.kitty.slice(),
         kittyPickedUp: true,
       },
     };
@@ -345,6 +349,7 @@ export class GameStore {
         ...state.hand,
         phase: 'declareTrump',
         kitty: cards.slice(),
+        kittyPickedUpCards: [],
         hands,
       },
     };
