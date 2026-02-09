@@ -956,12 +956,16 @@ function App() {
             {isBidder || kittyCards.length > 0 ? (
               <div className="bidding-card kitty-card">
                 <p className="eyebrow">Kitty</p>
-                {kittyCards.length ? (
+                {activePhase === 'kitty' ? (
+                  <p className="muted">
+                    Kitty cards are now in your hand. Select 5 cards above to discard back to the kitty.
+                  </p>
+                ) : kittyCards.length ? (
                   <div className="card-grid">
                     {kittyCards.map((card) => renderCardPill(card, false))}
                   </div>
                 ) : (
-                  <p className="muted">Kitty is hidden until pickup.</p>
+                  <p className="muted">Kitty will appear here after you discard.</p>
                 )}
               </div>
             ) : null}
