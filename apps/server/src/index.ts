@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
+import { GameStore } from './game.js';
 import { RoomStore, type RoomState } from './rooms.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -23,6 +24,10 @@ type RoomReadyPayload = { roomCode: string; ready: boolean };
 type RoomAck =
   | { ok: true; roomCode: string; playerId: string; state: RoomState }
   | { ok: false; message: string };
+type GameStartPayload = { roomCode: string; settings?: { minBid?: number; step?: number } };
+type GameBidPayload = { roomCode: string; amount: number };
+type GamePassPayload = { roomCode: string };
+type GamePassPartnerPayload = { roomCode: string };
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_CODE_LENGTH = 4;
@@ -36,6 +41,7 @@ const generateRoomCode = () => {
 };
 
 const rooms = new RoomStore();
+const games = new GameStore();
 
 io.on('connection', (socket) => {
   socket.emit('server:hello', { ok: true, serverTime: Date.now() });
@@ -124,6 +130,62 @@ io.on('connection', (socket) => {
     }
 
     io.to(roomCode).emit('room:state', result.value);
+  });
+
+  socket.on('game:start', ({ roomCode, settings }: GameStartPayload) => {
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const roomState = rooms.getRoomState(normalizedCode);
+    if (!roomState) {
+      socket.emit('game:error', { message: 'room missing' });
+      return;
+    }
+
+    const result = games.startGame(roomState, settings);
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    io.to(normalizedCode).emit('game:state', result.value);
+  });
+
+  socket.on('game:bid', ({ roomCode, amount }: GameBidPayload) => {
+    const resolvedPlayerId = socket.data.playerId ?? socket.id;
+    socket.data.playerId = resolvedPlayerId;
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = games.applyAction(normalizedCode, resolvedPlayerId, { type: 'bid', amount });
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    io.to(normalizedCode).emit('game:state', result.value);
+  });
+
+  socket.on('game:pass', ({ roomCode }: GamePassPayload) => {
+    const resolvedPlayerId = socket.data.playerId ?? socket.id;
+    socket.data.playerId = resolvedPlayerId;
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = games.applyAction(normalizedCode, resolvedPlayerId, { type: 'pass' });
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    io.to(normalizedCode).emit('game:state', result.value);
+  });
+
+  socket.on('game:passPartner', ({ roomCode }: GamePassPartnerPayload) => {
+    const resolvedPlayerId = socket.data.playerId ?? socket.id;
+    socket.data.playerId = resolvedPlayerId;
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = games.applyAction(normalizedCode, resolvedPlayerId, { type: 'passPartner' });
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    io.to(normalizedCode).emit('game:state', result.value);
   });
 });
 
