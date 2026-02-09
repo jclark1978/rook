@@ -38,6 +38,7 @@ type KittyPickupPayload = { roomCode: string };
 type KittyDiscardPayload = { roomCode: string; cards: Card[] };
 type TrumpDeclarePayload = { roomCode: string; trump: TrumpColor };
 type PlayCardPayload = { roomCode: string; card: Card };
+type NextHandPayload = { roomCode: string };
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_CODE_LENGTH = 4;
@@ -61,6 +62,8 @@ const toGamePublicState = (state: GameState) => ({
   bidding: state.bidding,
   whoseTurnSeat: state.whoseTurnSeat,
   whoseTurnPlayerId: state.whoseTurnPlayerId,
+  dealerSeat: state.seatOrder[state.dealerIndex] ?? null,
+  gameScores: state.scores,
 });
 
 const toHandPublicState = (state: GameState) => ({
@@ -70,6 +73,7 @@ const toHandPublicState = (state: GameState) => ({
   bidding: state.bidding,
   winningBid: state.hand.winningBid,
   bidderSeat: state.hand.bidder === null ? null : state.seatOrder[state.hand.bidder],
+  dealerSeat: state.seatOrder[state.dealerIndex] ?? null,
   whoseTurnSeat: state.whoseTurnSeat,
   handSizes: Object.fromEntries(
     state.seatOrder.map((seat, index) => [seat, state.hand.hands[index]?.length ?? 0]),
@@ -77,6 +81,9 @@ const toHandPublicState = (state: GameState) => ({
   kittyCount: state.hand.kitty.length,
   kittySize: state.hand.kittySize,
   trickCards: state.hand.trickCards,
+  handPoints: state.hand.handPoints,
+  biddersSet: state.hand.biddersSet,
+  gameScores: state.scores,
 });
 
 const emitHandState = (roomCode: string, state: GameState) => {
@@ -322,6 +329,19 @@ io.on('connection', (socket) => {
       return;
     }
 
+    emitHandState(normalizedCode, result.value);
+    await emitPrivateHands(normalizedCode, result.value);
+  });
+
+  socket.on('next:hand', async ({ roomCode }: NextHandPayload) => {
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = games.nextHand(normalizedCode);
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    emitGameState(normalizedCode, result.value);
     emitHandState(normalizedCode, result.value);
     await emitPrivateHands(normalizedCode, result.value);
   });
