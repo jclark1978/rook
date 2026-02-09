@@ -1,10 +1,3 @@
-Updated server game state to retain picked-up kitty cards for bidder-only visibility and extended private hand payloads to include kitty cards during kitty/declareTrump phases. Added kittyPickedUpCards tracking and ensured discarded kitty is sent only to bidder after discard.
-
-Web updates:
-- wired game:error to show the error banner alongside room:error
-- tightened kitty pickup/discard and trump declare button disables to require phase + bidder + discard selection
-- show Kitty panel when kitty cards arrive in hand:private even if not marked bidder
-
-Server trick stub:
-- Added trick play handling: state tracks trickCards, play:card validates turn/card, removes from hand, advances turn, clears trick after four cards.
-- Exposed trickCards in hand:state and added a test for play:card reducing hand size.
+Updated server trick play to use engine legality and winner logic, tracking trick lead color and resetting after each trick.
+Added server tests for trump-wins trick resolution and follow-suit enforcement.
+Vitest ran: tests passed, but Vitest failed to write cache due to permissions at /tmp/rook-wt/t17/node_modules/.vite.
