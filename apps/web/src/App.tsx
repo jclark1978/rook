@@ -153,19 +153,22 @@ const cardKey = (card: Card): string =>
 const cardLabel = (card: Card): string =>
   card.kind === 'rook' ? 'ROOK' : `${COLOR_LABELS[card.color]} ${card.rank}`
 
-const sortRankValue = (card: Card): number => {
-  if (card.kind === 'rook') return 999
+const sortRankValue = (card: Card, rookRankMode: 'rookHigh' | 'rookLow' = 'rookHigh'): number => {
+  if (card.kind === 'rook') return rookRankMode === 'rookHigh' ? 999 : -1
   // 1 is highest, then 14..2
   if (card.rank === 1) return 998
   return card.rank
 }
 
-const sortCardsHighToLow = (cards: Card[]): Card[] =>
+const sortCardsHighToLow = (
+  cards: Card[],
+  rookRankMode: 'rookHigh' | 'rookLow' = 'rookHigh',
+): Card[] =>
   cards
     .slice()
     .sort((a, b) => {
-      const av = sortRankValue(a)
-      const bv = sortRankValue(b)
+      const av = sortRankValue(a, rookRankMode)
+      const bv = sortRankValue(b, rookRankMode)
       return bv - av
     })
 
@@ -180,7 +183,11 @@ type HandColumns = {
   columns: Array<{ color: TrumpColor; label: string; cards: Card[] }>
 }
 
-const buildHandColumns = (cards: Card[]): HandColumns => {
+const buildHandColumns = (
+  cards: Card[],
+  trumpColor?: TrumpColor,
+  rookRankMode: 'rookHigh' | 'rookLow' = 'rookHigh',
+): HandColumns => {
   const rookCards = cards.filter((card) => card.kind === 'rook')
   const suited = cards.filter((card) => card.kind === 'suit') as Extract<Card, { kind: 'suit' }>[]
 
@@ -195,11 +202,17 @@ const buildHandColumns = (cards: Card[]): HandColumns => {
     byColor[card.color].push(card)
   }
 
+  if (trumpColor && rookCards.length) {
+    // Once trump is declared, the Rook should appear in the trump column.
+    // Placement (top/bottom) is handled by the sorter via rookRankMode.
+    byColor[trumpColor].push(...rookCards)
+  }
+
   const columns: Array<{ color: TrumpColor; label: string; cards: Card[] }> = [
-    { color: 'red', label: 'Red', cards: sortCardsHighToLow(byColor.red) },
-    { color: 'black', label: 'Black', cards: sortCardsHighToLow(byColor.black) },
-    { color: 'yellow', label: 'Yellow', cards: sortCardsHighToLow(byColor.yellow) },
-    { color: 'green', label: 'Green', cards: sortCardsHighToLow(byColor.green) },
+    { color: 'red', label: 'Red', cards: sortCardsHighToLow(byColor.red, rookRankMode) },
+    { color: 'black', label: 'Black', cards: sortCardsHighToLow(byColor.black, rookRankMode) },
+    { color: 'yellow', label: 'Yellow', cards: sortCardsHighToLow(byColor.yellow, rookRankMode) },
+    { color: 'green', label: 'Green', cards: sortCardsHighToLow(byColor.green, rookRankMode) },
   ]
 
   return { rookCards, columns }
@@ -596,14 +609,16 @@ function App() {
     return 'Bidding in progress.'
   }, [activePhase, isBidder])
 
-  const currentTrump = useMemo(() => {
+  const currentTrump = useMemo((): TrumpColor | null => {
     if (!handState) return null
     const trumpFromState =
-      handState.trump ??
-      (handState as { trumpColor?: string }).trumpColor ??
+      (handState.trump as TrumpColor | undefined) ??
+      ((handState as { trumpColor?: string }).trumpColor as TrumpColor | undefined) ??
       null
     return trumpFromState
   }, [handState])
+
+  const trumpColorForHand = currentTrump ?? undefined
 
   const kittyCount = handState?.kittyCount ?? kittyCards.length
 
@@ -775,12 +790,17 @@ function App() {
     )
   }
 
-  const renderHandBySuit = (cards: Card[], options?: RenderCardOptions) => {
-    const { rookCards, columns } = buildHandColumns(cards)
+  const renderHandBySuit = (
+    cards: Card[],
+    options?: RenderCardOptions,
+    trumpColor?: TrumpColor,
+    rookRankMode: 'rookHigh' | 'rookLow' = 'rookHigh',
+  ) => {
+    const { rookCards, columns } = buildHandColumns(cards, trumpColor, rookRankMode)
 
     return (
       <div className="hand-sorted">
-        {rookCards.length ? (
+        {!trumpColor && rookCards.length ? (
           <div className="hand-rook-row">
             <p className="meta-label">Rook</p>
             <div className="hand-rook-cards">
@@ -1093,7 +1113,11 @@ function App() {
             <div className="bidding-card hand-card">
               <p className="eyebrow">Your Hand</p>
               {handCards.length ? (
-                renderHandBySuit(handCards)
+                (() => {
+                  // TODO: wire rookHigh/rookLow from server settings; default rookHigh for now.
+                  const rookRankMode: 'rookHigh' | 'rookLow' = 'rookHigh'
+                  return renderHandBySuit(handCards, undefined, trumpColorForHand, rookRankMode)
+                })()
               ) : (
                 <p className="empty-state">Waiting for deal...</p>
               )}
@@ -1321,11 +1345,19 @@ function App() {
                     mySeat?.id &&
                     handState?.whoseTurnSeat === mySeat.id
 
-                  return renderHandBySuit(handCards, {
-                    selectable: isBidder && activePhase === 'kitty',
-                    clickable: Boolean(isTrickTurn),
-                    onClick: isTrickTurn ? emitPlayCard : undefined,
-                  })
+                  // TODO: wire rookHigh/rookLow from server settings; default rookHigh for now.
+                  const rookRankMode: 'rookHigh' | 'rookLow' = 'rookHigh'
+
+                  return renderHandBySuit(
+                    handCards,
+                    {
+                      selectable: isBidder && activePhase === 'kitty',
+                      clickable: Boolean(isTrickTurn),
+                      onClick: isTrickTurn ? emitPlayCard : undefined,
+                    },
+                    trumpColorForHand,
+                    rookRankMode,
+                  )
                 })()
               ) : (
                 <p className="empty-state">No cards yet.</p>
