@@ -17,3 +17,4 @@ export * from './cards.js';
 export * from './deck.js';
 export * from './bidding.js';
 export * from './trick.js';
+export * from './scoring.js';
