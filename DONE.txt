@@ -1,0 +1,1 @@
+Added trick play handling in the server: game state tracks trickCards, play:card validates turn/card, removes from hand, advances turn, and clears trick after four cards. Exposed trickCards in hand:state, added socket handler, and added a test for play:card reducing hand size.

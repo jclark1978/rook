@@ -24,6 +24,7 @@ export type HandState = {
   kittySize: number;
   kitty: Card[];
   hands: Card[][];
+  trickCards: Array<{ seat: Seat; card: Card }>;
   bidder: PlayerId | null;
   winningBid: Bid | null;
   trump?: TrumpColor;
@@ -139,6 +140,7 @@ export const createGameState = (
     kittySize: KITTY_SIZE,
     kitty,
     hands,
+    trickCards: [],
     bidder: null,
     winningBid: null,
     kittyPickedUp: false,
@@ -375,7 +377,66 @@ export class GameStore {
       hand: {
         ...state.hand,
         phase: 'trick',
+        trickCards: [],
         trump,
+      },
+    };
+
+    game.state = nextState;
+    return { ok: true, value: nextState };
+  }
+
+  playCard(roomCode: string, playerId: string, card: Card): GameResult<GameState> {
+    const game = this.games.get(roomCode);
+    if (!game) return { ok: false, error: 'game missing' };
+    const { state } = game;
+    if (state.phase !== 'trick') return { ok: false, error: 'trick not active' };
+    if (state.whoseTurnPlayerId !== playerId) {
+      return { ok: false, error: 'not your turn' };
+    }
+
+    const indexResult = findPlayerIndex(state.playerOrder, playerId);
+    if (!indexResult.ok) return indexResult;
+    const playerIndex = indexResult.value;
+
+    const currentHand = state.hand.hands[playerIndex] ?? [];
+    const nextHandResult = removeCards(currentHand, [card]);
+    if (!nextHandResult.ok) return nextHandResult;
+
+    const hands = state.hand.hands.map((hand, index) =>
+      index === playerIndex ? nextHandResult.value : hand.slice(),
+    );
+
+    const nextTrickCards = [
+      ...state.hand.trickCards,
+      { seat: state.seatOrder[playerIndex], card },
+    ];
+
+    let trickCards = nextTrickCards;
+    let whoseTurnSeat = state.whoseTurnSeat;
+    let whoseTurnPlayerId = state.whoseTurnPlayerId;
+
+    if (nextTrickCards.length >= state.seatOrder.length) {
+      const winnerSeat = nextTrickCards[0]?.seat ?? state.seatOrder[playerIndex];
+      const winnerIndex = state.seatOrder.indexOf(winnerSeat);
+      const resolvedIndex = winnerIndex === -1 ? playerIndex : winnerIndex;
+      whoseTurnSeat = state.seatOrder[resolvedIndex];
+      whoseTurnPlayerId = state.playerOrder[resolvedIndex];
+      trickCards = [];
+    } else {
+      const nextIndex = (playerIndex + 1) % state.seatOrder.length;
+      whoseTurnSeat = state.seatOrder[nextIndex];
+      whoseTurnPlayerId = state.playerOrder[nextIndex];
+    }
+
+    const nextState: GameState = {
+      ...state,
+      whoseTurnSeat,
+      whoseTurnPlayerId,
+      hand: {
+        ...state.hand,
+        hands,
+        trickCards,
       },
     };
 
