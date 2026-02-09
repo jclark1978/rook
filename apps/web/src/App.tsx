@@ -180,9 +180,30 @@ function App() {
     // So we connect back to the same host serving this page.
     const serverUrl = `${window.location.protocol}//${window.location.hostname}:3001`
 
-    const stored = window.localStorage.getItem('rook:playerId')
-    const stablePlayerId = stored && stored.trim() ? stored : crypto.randomUUID()
-    window.localStorage.setItem('rook:playerId', stablePlayerId)
+    const getStablePlayerId = () => {
+      try {
+        const stored = window.localStorage.getItem('rook:playerId')
+        if (stored && stored.trim()) return stored
+      } catch {
+        // ignore
+      }
+
+      // Some mobile browsers (older iOS Safari) may not support crypto.randomUUID.
+      const generated =
+        (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (crypto as any).randomUUID()
+          : `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`)
+
+      try {
+        window.localStorage.setItem('rook:playerId', generated)
+      } catch {
+        // ignore
+      }
+      return generated
+    }
+
+    const stablePlayerId = getStablePlayerId()
     stablePlayerIdRef.current = stablePlayerId
 
     const socket: Socket = io(serverUrl, {
