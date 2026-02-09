@@ -37,3 +37,4 @@ export type {
 export * from './trick.js';
 export * from './scoring.js';
 export * from './state.js';
+export * from './hand.js';
