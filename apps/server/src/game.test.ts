@@ -79,6 +79,47 @@ describe('Game reducer', () => {
     expect(playResult.value.hand.hands[0].length).toBe(beforeCount - 1);
   });
 
+  it('removes the played card from the correct player hand', () => {
+    const createResult = createGameState('ROOM6', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    const store = new GameStore();
+    const playerIndex = 1;
+    const playedCard = suitCard('red', 9);
+    const remainingCard = suitCard('yellow', 2);
+
+    (store as { games: Map<string, { state: typeof state }> }).games.set('ROOM6', {
+      state: {
+        ...state,
+        phase: 'trick',
+        whoseTurnSeat: state.seatOrder[playerIndex],
+        whoseTurnPlayerId: state.playerOrder[playerIndex],
+        hand: {
+          ...state.hand,
+          phase: 'trick',
+          trump: 'red',
+          trickCards: [],
+          trickLeadColor: undefined,
+          hands: [
+            [suitCard('green', 3)],
+            [playedCard, remainingCard],
+            [suitCard('black', 4)],
+            [suitCard('yellow', 5)],
+          ],
+        },
+      },
+    });
+
+    const playResult = store.playCard('ROOM6', state.playerOrder[playerIndex], playedCard);
+    expect(playResult.ok).toBe(true);
+    if (!playResult.ok) return;
+
+    expect(playResult.value.hand.hands[playerIndex]).toEqual([remainingCard]);
+    expect(playResult.value.hand.hands[0]).toEqual([suitCard('green', 3)]);
+  });
+
   it('awards the trick to a trump winner', () => {
     const createResult = createGameState('ROOM4', createSeats());
     expect(createResult.ok).toBe(true);

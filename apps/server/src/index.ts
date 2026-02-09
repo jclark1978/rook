@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import type { Card } from '@rook/engine/src/cards.js';
+import { cardId, type Card } from '@rook/engine/src/cards.js';
 import type { DeckMode } from '@rook/engine/src/index.js';
 import type { TrumpColor } from '@rook/engine/src/trick.js';
 import { GameStore, type GameState } from './game.js';
@@ -307,6 +307,12 @@ io.on('connection', (socket) => {
     const resolvedPlayerId = socket.data.playerId ?? socket.id;
     socket.data.playerId = resolvedPlayerId;
     const normalizedCode = roomCode.trim().toUpperCase();
+    // Helps trace trick-phase play issues end-to-end.
+    console.info('[server] play:card', {
+      roomCode: normalizedCode,
+      playerId: resolvedPlayerId,
+      card: cardId(card),
+    });
     const result = games.playCard(normalizedCode, resolvedPlayerId, card);
     if (!result.ok) {
       socket.emit('game:error', { message: result.error });

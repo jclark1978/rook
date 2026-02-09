@@ -558,6 +558,8 @@ function App() {
       return
     }
     setErrorMessage('')
+    // Helps diagnose click-to-play issues in trick phase.
+    console.info('[client] play:card', { roomCode, card })
     socket.emit('play:card', { roomCode, card })
   }
 
@@ -602,22 +604,6 @@ function App() {
         <span>{cardLabel(card)}</span>
       )
 
-    if (!selectable) {
-      return (
-        <div key={key} className={className}>
-          {content}
-        </div>
-      )
-    }
-
-    if (!selectable && !clickable) {
-      return (
-        <div key={key} className={className}>
-          {content}
-        </div>
-      )
-    }
-
     if (selectable) {
       return (
         <label key={key} className={className}>
@@ -631,15 +617,23 @@ function App() {
       )
     }
 
+    if (clickable) {
+      return (
+        <button
+          key={key}
+          type="button"
+          className={className}
+          onClick={() => onClick?.(card)}
+        >
+          {content}
+        </button>
+      )
+    }
+
     return (
-      <button
-        key={key}
-        type="button"
-        className={className}
-        onClick={() => onClick?.(card)}
-      >
+      <div key={key} className={className}>
         {content}
-      </button>
+      </div>
     )
   }
 
