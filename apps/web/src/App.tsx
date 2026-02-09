@@ -895,6 +895,17 @@ function App() {
                 )}
               </ul>
             </div>
+
+            <div className="bidding-card hand-card">
+              <p className="eyebrow">Your Hand</p>
+              <div className="card-grid">
+                {handCards.length ? (
+                  handCards.map((card) => renderCardPill(card, false))
+                ) : (
+                  <p className="empty-state">Waiting for deal...</p>
+                )}
+              </div>
+            </div>
           </section>
         </main>
       ) : (

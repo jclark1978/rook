@@ -508,7 +508,7 @@ button.not-ready {
 .card-pill.card-click {
   cursor: pointer;
   border: 2px solid var(--border-strong);
-  background: var(--surface-strong);
+  /* Don't override the suit color background (card-red/card-green/etc). */
   box-shadow: var(--shadow-cutout);
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
