@@ -1,1 +1,6 @@
-Added a new trickRound helper module with applyPlay/isTrickComplete/trickWinner, exported it from rook-engine, and added tests covering trump and rook high/low winner selection.
+Engine:
+- Added trickRound helper module (applyPlay/isTrickComplete/trickWinner), exported from rook-engine, with tests for trump and rook high/low.
+
+Server:
+- Updated trick play to use engine legality + winner logic, track trick lead color, reset after each trick.
+- Added tests for trump-wins resolution and follow-suit enforcement.

@@ -9,6 +9,12 @@ const createSeats = (): Record<Seat, string> => ({
   T2P2: 'player-d',
 });
 
+const suitCard = (color: 'red' | 'yellow' | 'green' | 'black', rank: number) => ({
+  kind: 'suit' as const,
+  color,
+  rank,
+});
+
 describe('Game reducer', () => {
   it('advances turn after bid and pass', () => {
     const createResult = createGameState('ROOM1', createSeats());
@@ -71,5 +77,87 @@ describe('Game reducer', () => {
     if (!playResult.ok) return;
 
     expect(playResult.value.hand.hands[0].length).toBe(beforeCount - 1);
+  });
+
+  it('awards the trick to a trump winner', () => {
+    const createResult = createGameState('ROOM4', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    const store = new GameStore();
+    (store as { games: Map<string, { state: typeof state }> }).games.set('ROOM4', {
+      state: {
+        ...state,
+        phase: 'trick',
+        whoseTurnSeat: state.seatOrder[0],
+        whoseTurnPlayerId: state.playerOrder[0],
+        hand: {
+          ...state.hand,
+          phase: 'trick',
+          trump: 'black',
+          trickCards: [],
+          trickLeadColor: undefined,
+          hands: [
+            [suitCard('red', 10)],
+            [suitCard('yellow', 14)],
+            [suitCard('black', 2)],
+            [suitCard('red', 14)],
+          ],
+        },
+      },
+    });
+
+    const play1 = store.playCard('ROOM4', state.playerOrder[0], suitCard('red', 10));
+    expect(play1.ok).toBe(true);
+    const play2 = store.playCard('ROOM4', state.playerOrder[1], suitCard('yellow', 14));
+    expect(play2.ok).toBe(true);
+    const play3 = store.playCard('ROOM4', state.playerOrder[2], suitCard('black', 2));
+    expect(play3.ok).toBe(true);
+    const play4 = store.playCard('ROOM4', state.playerOrder[3], suitCard('red', 14));
+    expect(play4.ok).toBe(true);
+    if (!play4.ok) return;
+
+    expect(play4.value.whoseTurnSeat).toBe(state.seatOrder[2]);
+    expect(play4.value.hand.trickCards).toHaveLength(0);
+  });
+
+  it('enforces follow-suit when a lead color is set', () => {
+    const createResult = createGameState('ROOM5', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    const store = new GameStore();
+    (store as { games: Map<string, { state: typeof state }> }).games.set('ROOM5', {
+      state: {
+        ...state,
+        phase: 'trick',
+        whoseTurnSeat: state.seatOrder[0],
+        whoseTurnPlayerId: state.playerOrder[0],
+        hand: {
+          ...state.hand,
+          phase: 'trick',
+          trump: 'black',
+          trickCards: [],
+          trickLeadColor: undefined,
+          hands: [
+            [suitCard('red', 5)],
+            [suitCard('red', 7), suitCard('yellow', 9)],
+            [suitCard('green', 3)],
+            [suitCard('black', 2)],
+          ],
+        },
+      },
+    });
+
+    const leadPlay = store.playCard('ROOM5', state.playerOrder[0], suitCard('red', 5));
+    expect(leadPlay.ok).toBe(true);
+
+    const illegalPlay = store.playCard('ROOM5', state.playerOrder[1], suitCard('yellow', 9));
+    expect(illegalPlay.ok).toBe(false);
+    if (!illegalPlay.ok) {
+      expect(illegalPlay.error).toBe('illegal play');
+    }
   });
 });

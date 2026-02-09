@@ -11,7 +11,7 @@ import type { Card } from '@rook/engine/src/cards.js';
 import { cardId } from '@rook/engine/src/cards.js';
 import type { DeckMode } from '@rook/engine/src/index.js';
 import { buildDeck, deal, mulberry32, shuffle } from '@rook/engine/src/deck.js';
-import type { TrumpColor } from '@rook/engine/src/trick.js';
+import { determineTrickWinner, getLegalPlays, type TrumpColor } from '@rook/engine/src/trick.js';
 import { SEATS, type RoomState, type Seat } from './rooms.js';
 
 export type GamePhase = 'bidding' | 'kitty' | 'declareTrump' | 'trick';
@@ -26,6 +26,7 @@ export type HandState = {
   kittyPickedUpCards: Card[];
   hands: Card[][];
   trickCards: Array<{ seat: Seat; card: Card }>;
+  trickLeadColor?: TrumpColor;
   bidder: PlayerId | null;
   winningBid: Bid | null;
   trump?: TrumpColor;
@@ -143,6 +144,7 @@ export const createGameState = (
     kittyPickedUpCards: [],
     hands,
     trickCards: [],
+    trickLeadColor: undefined,
     bidder: null,
     winningBid: null,
     kittyPickedUp: false,
@@ -383,6 +385,7 @@ export class GameStore {
         ...state.hand,
         phase: 'trick',
         trickCards: [],
+        trickLeadColor: undefined,
         trump,
       },
     };
@@ -405,6 +408,15 @@ export class GameStore {
     const playerIndex = indexResult.value;
 
     const currentHand = state.hand.hands[playerIndex] ?? [];
+    const trump = state.hand.trump;
+    if (!trump) {
+      return { ok: false, error: 'trump not set' };
+    }
+    const legalPlays = getLegalPlays(currentHand, state.hand.trickLeadColor, trump, 'rookHigh');
+    if (!legalPlays.includes(cardId(card))) {
+      return { ok: false, error: 'illegal play' };
+    }
+
     const nextHandResult = removeCards(currentHand, [card]);
     if (!nextHandResult.ok) return nextHandResult;
 
@@ -412,22 +424,33 @@ export class GameStore {
       index === playerIndex ? nextHandResult.value : hand.slice(),
     );
 
+    const nextLeadColor =
+      state.hand.trickLeadColor ?? (card.kind === 'suit' ? card.color : undefined);
     const nextTrickCards = [
       ...state.hand.trickCards,
       { seat: state.seatOrder[playerIndex], card },
     ];
 
     let trickCards = nextTrickCards;
+    let trickLeadColor = nextLeadColor;
     let whoseTurnSeat = state.whoseTurnSeat;
     let whoseTurnPlayerId = state.whoseTurnPlayerId;
 
     if (nextTrickCards.length >= state.seatOrder.length) {
-      const winnerSeat = nextTrickCards[0]?.seat ?? state.seatOrder[playerIndex];
+      const winnerCardIndex = determineTrickWinner(
+        nextTrickCards.map((entry) => entry.card),
+        nextLeadColor,
+        trump,
+        'rookHigh',
+      );
+      const winnerSeat =
+        nextTrickCards[winnerCardIndex]?.seat ?? state.seatOrder[playerIndex];
       const winnerIndex = state.seatOrder.indexOf(winnerSeat);
       const resolvedIndex = winnerIndex === -1 ? playerIndex : winnerIndex;
       whoseTurnSeat = state.seatOrder[resolvedIndex];
       whoseTurnPlayerId = state.playerOrder[resolvedIndex];
       trickCards = [];
+      trickLeadColor = undefined;
     } else {
       const nextIndex = (playerIndex + 1) % state.seatOrder.length;
       whoseTurnSeat = state.seatOrder[nextIndex];
@@ -442,6 +465,7 @@ export class GameStore {
         ...state.hand,
         hands,
         trickCards,
+        trickLeadColor,
       },
     };
 
