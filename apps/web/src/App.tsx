@@ -802,7 +802,7 @@ function App() {
           </section>
 
           <section className="bidding-grid">
-            <div className="bidding-card">
+            <div className="bidding-card high-bid">
               <p className="eyebrow">High Bid</p>
               <div className="bidding-highlight">
                 <p className="bidding-amount">
@@ -871,6 +871,17 @@ function App() {
               </div>
             </div>
 
+            <div className="bidding-card hand-card">
+              <p className="eyebrow">Your Hand</p>
+              <div className="card-grid">
+                {handCards.length ? (
+                  handCards.map((card) => renderCardPill(card, false))
+                ) : (
+                  <p className="empty-state">Waiting for deal...</p>
+                )}
+              </div>
+            </div>
+
             <div className="bidding-card bidding-history">
               <p className="eyebrow">Bid History</p>
               <ul className="history-list">
@@ -896,16 +907,6 @@ function App() {
               </ul>
             </div>
 
-            <div className="bidding-card hand-card">
-              <p className="eyebrow">Your Hand</p>
-              <div className="card-grid">
-                {handCards.length ? (
-                  handCards.map((card) => renderCardPill(card, false))
-                ) : (
-                  <p className="empty-state">Waiting for deal...</p>
-                )}
-              </div>
-            </div>
           </section>
         </main>
       ) : (

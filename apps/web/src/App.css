@@ -335,6 +335,17 @@ button.not-ready {
   gap: 1.5rem;
 }
 
+@media (min-width: 900px) {
+  .bidding-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .bidding-card.high-bid,
+  .bidding-card.bidding-history {
+    grid-column: 1 / -1;
+  }
+}
+
 .bidding-card {
   padding: 1.5rem;
   border-radius: 1.4rem;
