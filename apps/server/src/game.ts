@@ -2,11 +2,33 @@ import {
   applyBiddingAction,
   createBiddingState,
   type BiddingState,
+  type Bid,
+  getWinningBid,
+  isBiddingComplete,
   type PlayerId,
 } from '@rook/engine/src/bidding.js';
+import type { Card } from '@rook/engine/src/cards.js';
+import { cardId } from '@rook/engine/src/cards.js';
+import type { DeckMode } from '@rook/engine/src/index.js';
+import { buildDeck, deal, mulberry32, shuffle } from '@rook/engine/src/deck.js';
+import type { TrumpColor } from '@rook/engine/src/trick.js';
 import { SEATS, type RoomState, type Seat } from './rooms.js';
 
-export type GamePhase = 'bidding';
+export type GamePhase = 'bidding' | 'kitty' | 'declareTrump' | 'trick';
+
+export type HandState = {
+  phase: GamePhase;
+  deckMode: DeckMode;
+  startedAt: number;
+  seed: number;
+  kittySize: number;
+  kitty: Card[];
+  hands: Card[][];
+  bidder: PlayerId | null;
+  winningBid: Bid | null;
+  trump?: TrumpColor;
+  kittyPickedUp: boolean;
+};
 
 export type GameState = {
   roomCode: string;
@@ -14,6 +36,7 @@ export type GameState = {
   seatOrder: Seat[];
   playerOrder: string[];
   bidding: BiddingState;
+  hand: HandState;
   whoseTurnSeat: Seat;
   whoseTurnPlayerId: string;
 };
@@ -22,6 +45,7 @@ export type GameStartSettings = {
   minBid?: number;
   step?: number;
   startingPlayer?: PlayerId;
+  deckMode?: DeckMode;
 };
 
 export type GameAction =
@@ -37,6 +61,7 @@ type Game = {
   state: GameState;
 };
 
+const KITTY_SIZE = 5;
 const getSeatOrder = (): Seat[] => [...SEATS];
 
 const buildPlayerOrder = (seats: Record<Seat, string | null>): GameResult<string[]> => {
@@ -49,6 +74,22 @@ const buildPlayerOrder = (seats: Record<Seat, string | null>): GameResult<string
     order.push(playerId);
   }
   return { ok: true, value: order };
+};
+
+const createSeed = (roomCode: string, startedAt: number): number => {
+  const input = `${roomCode}:${startedAt}`;
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+};
+
+const dealHands = (roomCode: string, startedAt: number, deckMode: DeckMode) => {
+  const seed = createSeed(roomCode, startedAt);
+  const deck = shuffle(buildDeck(deckMode), mulberry32(seed));
+  const { hands, kitty } = deal(deck, KITTY_SIZE);
+  return { hands, kitty, seed };
 };
 
 const findPlayerIndex = (playerOrder: string[], playerId: string): GameResult<PlayerId> => {
@@ -87,6 +128,21 @@ export const createGameState = (
     settings?.minBid,
     settings?.step,
   );
+  const startedAt = Date.now();
+  const deckMode = settings?.deckMode ?? 'full';
+  const { hands, kitty, seed } = dealHands(roomCode, startedAt, deckMode);
+  const hand: HandState = {
+    phase: 'bidding',
+    deckMode,
+    startedAt,
+    seed,
+    kittySize: KITTY_SIZE,
+    kitty,
+    hands,
+    bidder: null,
+    winningBid: null,
+    kittyPickedUp: false,
+  };
   const currentPlayerSeat = seatOrder[bidding.currentPlayer];
   const currentPlayerId = playerOrder[bidding.currentPlayer];
 
@@ -98,6 +154,7 @@ export const createGameState = (
       seatOrder,
       playerOrder,
       bidding,
+      hand,
       whoseTurnSeat: currentPlayerSeat,
       whoseTurnPlayerId: currentPlayerId,
     },
@@ -126,15 +183,74 @@ export const reduceGameState = (
         : { type: 'passPartner', player: playerIndex };
 
   const bidding = applyBiddingAction(state.bidding, biddingAction);
-  const whoseTurnSeat = state.seatOrder[bidding.currentPlayer];
-  const whoseTurnPlayerId = state.playerOrder[bidding.currentPlayer];
+  let whoseTurnSeat = state.seatOrder[bidding.currentPlayer];
+  let whoseTurnPlayerId = state.playerOrder[bidding.currentPlayer];
+  let phase: GamePhase = state.phase;
+  let hand = state.hand;
+
+  if (isBiddingComplete(bidding)) {
+    const winningBid = getWinningBid(bidding);
+    const bidder = winningBid?.player ?? null;
+    if (bidder !== null) {
+      whoseTurnSeat = state.seatOrder[bidder];
+      whoseTurnPlayerId = state.playerOrder[bidder];
+    }
+    phase = 'kitty';
+    hand = {
+      ...state.hand,
+      phase,
+      winningBid,
+      bidder,
+      kittyPickedUp: false,
+    };
+  }
 
   return {
     ...state,
+    phase,
     bidding,
+    hand,
     whoseTurnSeat,
     whoseTurnPlayerId,
   };
+};
+
+const ensureBidder = (state: GameState, playerId: string): GameResult<PlayerId> => {
+  if (state.hand.bidder === null) {
+    return { ok: false, error: 'no winning bid' };
+  }
+  const bidderId = state.playerOrder[state.hand.bidder];
+  if (bidderId !== playerId) {
+    return { ok: false, error: 'only the bidder may act' };
+  }
+  return { ok: true, value: state.hand.bidder };
+};
+
+const removeCards = (hand: Card[], cards: Card[]): GameResult<Card[]> => {
+  const counts = new Map<string, number>();
+  for (const card of cards) {
+    const id = cardId(card);
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+
+  const next: Card[] = [];
+  for (const card of hand) {
+    const id = cardId(card);
+    const remaining = counts.get(id) ?? 0;
+    if (remaining > 0) {
+      counts.set(id, remaining - 1);
+      continue;
+    }
+    next.push(card);
+  }
+
+  for (const remaining of counts.values()) {
+    if (remaining > 0) {
+      return { ok: false, error: 'discard cards missing from hand' };
+    }
+  }
+
+  return { ok: true, value: next };
 };
 
 export class GameStore {
@@ -165,6 +281,106 @@ export class GameStore {
       const message = error instanceof Error ? error.message : 'invalid action';
       return { ok: false, error: message };
     }
+  }
+
+  pickupKitty(roomCode: string, playerId: string): GameResult<GameState> {
+    const game = this.games.get(roomCode);
+    if (!game) return { ok: false, error: 'game missing' };
+    const { state } = game;
+    if (state.phase !== 'kitty') return { ok: false, error: 'kitty not available' };
+
+    const bidderResult = ensureBidder(state, playerId);
+    if (!bidderResult.ok) return bidderResult;
+    if (state.hand.kittyPickedUp) {
+      return { ok: false, error: 'kitty already picked up' };
+    }
+
+    const bidderIndex = bidderResult.value;
+    const hands = state.hand.hands.map((hand) => hand.slice());
+    hands[bidderIndex] = [...hands[bidderIndex], ...state.hand.kitty];
+
+    const nextState: GameState = {
+      ...state,
+      hand: {
+        ...state.hand,
+        hands,
+        kitty: [],
+        kittyPickedUp: true,
+      },
+    };
+
+    game.state = nextState;
+    return { ok: true, value: nextState };
+  }
+
+  discardKitty(roomCode: string, playerId: string, cards: Card[]): GameResult<GameState> {
+    const game = this.games.get(roomCode);
+    if (!game) return { ok: false, error: 'game missing' };
+    const { state } = game;
+    if (state.phase !== 'kitty') return { ok: false, error: 'kitty not available' };
+
+    const bidderResult = ensureBidder(state, playerId);
+    if (!bidderResult.ok) return bidderResult;
+    if (!state.hand.kittyPickedUp) {
+      return { ok: false, error: 'kitty must be picked up first' };
+    }
+    if (cards.length !== state.hand.kittySize) {
+      return { ok: false, error: 'discard must match kitty size' };
+    }
+
+    const bidderIndex = bidderResult.value;
+    const currentHand = state.hand.hands[bidderIndex];
+    const nextHandResult = removeCards(currentHand, cards);
+    if (!nextHandResult.ok) return nextHandResult;
+
+    const hands = state.hand.hands.map((hand) => hand.slice());
+    hands[bidderIndex] = nextHandResult.value;
+
+    const nextState: GameState = {
+      ...state,
+      phase: 'declareTrump',
+      whoseTurnSeat: state.seatOrder[bidderIndex],
+      whoseTurnPlayerId: state.playerOrder[bidderIndex],
+      hand: {
+        ...state.hand,
+        phase: 'declareTrump',
+        kitty: cards.slice(),
+        hands,
+      },
+    };
+
+    game.state = nextState;
+    return { ok: true, value: nextState };
+  }
+
+  declareTrump(
+    roomCode: string,
+    playerId: string,
+    trump: TrumpColor,
+  ): GameResult<GameState> {
+    const game = this.games.get(roomCode);
+    if (!game) return { ok: false, error: 'game missing' };
+    const { state } = game;
+    if (state.phase !== 'declareTrump') return { ok: false, error: 'trump not ready' };
+
+    const bidderResult = ensureBidder(state, playerId);
+    if (!bidderResult.ok) return bidderResult;
+
+    const bidderIndex = bidderResult.value;
+    const nextState: GameState = {
+      ...state,
+      phase: 'trick',
+      whoseTurnSeat: state.seatOrder[bidderIndex],
+      whoseTurnPlayerId: state.playerOrder[bidderIndex],
+      hand: {
+        ...state.hand,
+        phase: 'trick',
+        trump,
+      },
+    };
+
+    game.state = nextState;
+    return { ok: true, value: nextState };
   }
 
   getState(roomCode: string): GameState | null {

@@ -2,7 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { GameStore } from './game.js';
+import type { Card } from '@rook/engine/src/cards.js';
+import type { DeckMode } from '@rook/engine/src/index.js';
+import type { TrumpColor } from '@rook/engine/src/trick.js';
+import { GameStore, type GameState } from './game.js';
 import { RoomStore, type RoomState } from './rooms.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -24,10 +27,16 @@ type RoomReadyPayload = { roomCode: string; ready: boolean };
 type RoomAck =
   | { ok: true; roomCode: string; playerId: string; state: RoomState }
   | { ok: false; message: string };
-type GameStartPayload = { roomCode: string; settings?: { minBid?: number; step?: number } };
+type GameStartPayload = {
+  roomCode: string;
+  settings?: { minBid?: number; step?: number; deckMode?: DeckMode };
+};
 type GameBidPayload = { roomCode: string; amount: number };
 type GamePassPayload = { roomCode: string };
 type GamePassPartnerPayload = { roomCode: string };
+type KittyPickupPayload = { roomCode: string };
+type KittyDiscardPayload = { roomCode: string; cards: Card[] };
+type TrumpDeclarePayload = { roomCode: string; trump: TrumpColor };
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_CODE_LENGTH = 4;
@@ -42,6 +51,50 @@ const generateRoomCode = () => {
 
 const rooms = new RoomStore();
 const games = new GameStore();
+
+const toGamePublicState = (state: GameState) => ({
+  roomCode: state.roomCode,
+  phase: state.phase,
+  seatOrder: state.seatOrder,
+  playerOrder: state.playerOrder,
+  bidding: state.bidding,
+  whoseTurnSeat: state.whoseTurnSeat,
+  whoseTurnPlayerId: state.whoseTurnPlayerId,
+});
+
+const toHandPublicState = (state: GameState) => ({
+  roomCode: state.roomCode,
+  phase: state.phase,
+  trump: state.hand.trump,
+  bidding: state.bidding,
+  winningBid: state.hand.winningBid,
+  bidderSeat: state.hand.bidder === null ? null : state.seatOrder[state.hand.bidder],
+  whoseTurnSeat: state.whoseTurnSeat,
+  handSizes: Object.fromEntries(
+    state.seatOrder.map((seat, index) => [seat, state.hand.hands[index]?.length ?? 0]),
+  ),
+  kittyCount: state.hand.kitty.length,
+  kittySize: state.hand.kittySize,
+});
+
+const emitHandState = (roomCode: string, state: GameState) => {
+  io.to(roomCode).emit('hand:state', toHandPublicState(state));
+};
+
+const emitGameState = (roomCode: string, state: GameState) => {
+  io.to(roomCode).emit('game:state', toGamePublicState(state));
+};
+
+const emitPrivateHands = async (roomCode: string, state: GameState) => {
+  const sockets = await io.in(roomCode).fetchSockets();
+  for (const roomSocket of sockets) {
+    const playerId = roomSocket.data.playerId;
+    if (!playerId) continue;
+    const playerIndex = state.playerOrder.indexOf(playerId);
+    if (playerIndex === -1) continue;
+    roomSocket.emit('hand:private', { hand: state.hand.hands[playerIndex] ?? [] });
+  }
+};
 
 io.on('connection', (socket) => {
   socket.emit('server:hello', { ok: true, serverTime: Date.now() });
@@ -132,7 +185,7 @@ io.on('connection', (socket) => {
     io.to(roomCode).emit('room:state', result.value);
   });
 
-  socket.on('game:start', ({ roomCode, settings }: GameStartPayload) => {
+  socket.on('game:start', async ({ roomCode, settings }: GameStartPayload) => {
     const normalizedCode = roomCode.trim().toUpperCase();
     const roomState = rooms.getRoomState(normalizedCode);
     if (!roomState) {
@@ -146,7 +199,9 @@ io.on('connection', (socket) => {
       return;
     }
 
-    io.to(normalizedCode).emit('game:state', result.value);
+    emitGameState(normalizedCode, result.value);
+    emitHandState(normalizedCode, result.value);
+    await emitPrivateHands(normalizedCode, result.value);
   });
 
   socket.on('game:bid', ({ roomCode, amount }: GameBidPayload) => {
@@ -159,7 +214,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    io.to(normalizedCode).emit('game:state', result.value);
+    emitGameState(normalizedCode, result.value);
+    emitHandState(normalizedCode, result.value);
   });
 
   socket.on('game:pass', ({ roomCode }: GamePassPayload) => {
@@ -172,7 +228,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    io.to(normalizedCode).emit('game:state', result.value);
+    emitGameState(normalizedCode, result.value);
+    emitHandState(normalizedCode, result.value);
   });
 
   socket.on('game:passPartner', ({ roomCode }: GamePassPartnerPayload) => {
@@ -185,7 +242,52 @@ io.on('connection', (socket) => {
       return;
     }
 
-    io.to(normalizedCode).emit('game:state', result.value);
+    emitGameState(normalizedCode, result.value);
+    emitHandState(normalizedCode, result.value);
+  });
+
+  socket.on('kitty:pickup', async ({ roomCode }: KittyPickupPayload) => {
+    const resolvedPlayerId = socket.data.playerId ?? socket.id;
+    socket.data.playerId = resolvedPlayerId;
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = games.pickupKitty(normalizedCode, resolvedPlayerId);
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    emitGameState(normalizedCode, result.value);
+    emitHandState(normalizedCode, result.value);
+    await emitPrivateHands(normalizedCode, result.value);
+  });
+
+  socket.on('kitty:discard', async ({ roomCode, cards }: KittyDiscardPayload) => {
+    const resolvedPlayerId = socket.data.playerId ?? socket.id;
+    socket.data.playerId = resolvedPlayerId;
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = games.discardKitty(normalizedCode, resolvedPlayerId, cards);
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    emitGameState(normalizedCode, result.value);
+    emitHandState(normalizedCode, result.value);
+    await emitPrivateHands(normalizedCode, result.value);
+  });
+
+  socket.on('trump:declare', ({ roomCode, trump }: TrumpDeclarePayload) => {
+    const resolvedPlayerId = socket.data.playerId ?? socket.id;
+    socket.data.playerId = resolvedPlayerId;
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = games.declareTrump(normalizedCode, resolvedPlayerId, trump);
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    emitGameState(normalizedCode, result.value);
+    emitHandState(normalizedCode, result.value);
   });
 });
 
