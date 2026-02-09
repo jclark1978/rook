@@ -3,7 +3,7 @@ import { io, type Socket } from 'socket.io-client'
 import rookCard from './assets/rook-card.jpg'
 import './App.css'
 
-type View = 'home' | 'lobby' | 'bidding'
+type View = 'home' | 'lobby' | 'bidding' | 'hand'
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'connecting'
 
@@ -39,6 +39,12 @@ type BiddingHistoryEntry = {
   amount?: number
 }
 
+type TrumpColor = 'red' | 'yellow' | 'green' | 'black'
+
+type Card =
+  | { kind: 'suit'; color: TrumpColor; rank: number }
+  | { kind: 'rook' }
+
 type BiddingState = {
   currentPlayer?: number
   minBid?: number
@@ -62,7 +68,82 @@ type GameState = {
   passPartnerUsed?: [boolean, boolean]
 }
 
+type HandPublicState = {
+  roomCode?: string
+  phase?: string
+  bidderSeat?: SeatId | null
+  trump?: string | null
+  kittyCount?: number
+  whoseTurnSeat?: SeatId | null
+}
+
+type HandPrivateState = {
+  roomCode?: string
+  seat?: SeatId
+  hand?: unknown[]
+  kitty?: unknown[]
+  cards?: unknown[]
+  handCards?: unknown[]
+  kittyCards?: unknown[]
+}
+
 const seatOrder: SeatId[] = seats.map((seat) => seat.id)
+
+const COLOR_LABELS: Record<TrumpColor, string> = {
+  red: 'Red',
+  yellow: 'Yellow',
+  green: 'Green',
+  black: 'Black',
+}
+
+const normalizeCard = (raw: unknown): Card | null => {
+  if (!raw) return null
+  if (typeof raw === 'string') {
+    const upper = raw.toUpperCase()
+    if (upper === 'ROOK') return { kind: 'rook' }
+    const match = upper.match(/^(RED|YELLOW|GREEN|BLACK)[-_ ]?(\d{1,2})$/)
+    if (match) {
+      return {
+        kind: 'suit',
+        color: match[1].toLowerCase() as TrumpColor,
+        rank: Number(match[2]),
+      }
+    }
+    return null
+  }
+  if (typeof raw === 'object') {
+    const candidate = raw as { kind?: string; color?: string; rank?: number }
+    if (candidate.kind === 'rook') return { kind: 'rook' }
+    if (
+      candidate.kind === 'suit' &&
+      typeof candidate.color === 'string' &&
+      typeof candidate.rank === 'number'
+    ) {
+      const color = candidate.color.toLowerCase() as TrumpColor
+      if (color in COLOR_LABELS) {
+        return { kind: 'suit', color, rank: candidate.rank }
+      }
+    }
+    if (typeof candidate.color === 'string' && typeof candidate.rank === 'number') {
+      const color = candidate.color.toLowerCase() as TrumpColor
+      if (color in COLOR_LABELS) {
+        return { kind: 'suit', color, rank: candidate.rank }
+      }
+    }
+  }
+  return null
+}
+
+const normalizeCards = (raw: unknown): Card[] => {
+  if (!Array.isArray(raw)) return []
+  return raw.map((card) => normalizeCard(card)).filter(Boolean) as Card[]
+}
+
+const cardKey = (card: Card): string =>
+  card.kind === 'rook' ? 'ROOK' : `${card.color}_${card.rank}`
+
+const cardLabel = (card: Card): string =>
+  card.kind === 'rook' ? 'ROOK' : `${COLOR_LABELS[card.color]} ${card.rank}`
 
 function App() {
   const [view, setView] = useState<View>('home')
@@ -72,9 +153,13 @@ function App() {
     useState<ConnectionStatus>('connecting')
   const [roomState, setRoomState] = useState<RoomState | null>(null)
   const [gameState, setGameState] = useState<GameState | null>(null)
+  const [handState, setHandState] = useState<HandPublicState | null>(null)
+  const [handPrivate, setHandPrivate] = useState<HandPrivateState | null>(null)
   const [playerId, setPlayerId] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [customBid, setCustomBid] = useState('')
+  const [selectedDiscards, setSelectedDiscards] = useState<string[]>([])
+  const [selectedTrump, setSelectedTrump] = useState<TrumpColor>('red')
   const socketRef = useRef<Socket | null>(null)
 
   useEffect(() => {
@@ -108,8 +193,23 @@ function App() {
       if (state.roomCode) {
         setRoomCode(state.roomCode)
       }
-      setView('bidding')
+      setView(state.phase && state.phase !== 'bidding' ? 'hand' : 'bidding')
       setErrorMessage('')
+    }
+    const handleHandState = (state: HandPublicState) => {
+      setHandState(state)
+      if (state.roomCode) {
+        setRoomCode(state.roomCode)
+      }
+      setView('hand')
+      setErrorMessage('')
+    }
+    const handleHandPrivate = (state: HandPrivateState) => {
+      setHandPrivate(state)
+      if (state.roomCode) {
+        setRoomCode(state.roomCode)
+      }
+      setView((current) => (current === 'bidding' ? 'hand' : current))
     }
     const handleRoomError = (payload: { message?: string }) => {
       if (payload?.message) {
@@ -122,6 +222,8 @@ function App() {
     socket.on('connect_error', handleError)
     socket.on('room:state', handleRoomState)
     socket.on('game:state', handleGameState)
+    socket.on('hand:state', handleHandState)
+    socket.on('hand:private', handleHandPrivate)
     socket.on('room:error', handleRoomError)
 
     return () => {
@@ -130,6 +232,8 @@ function App() {
       socket.off('connect_error', handleError)
       socket.off('room:state', handleRoomState)
       socket.off('game:state', handleGameState)
+      socket.off('hand:state', handleHandState)
+      socket.off('hand:private', handleHandPrivate)
       socket.off('room:error', handleRoomError)
       socket.disconnect()
     }
@@ -265,6 +369,87 @@ function App() {
       return !biddingState.passPartnerUsed[team]
     })()
 
+  const activePhase = handState?.phase ?? gameState?.phase ?? 'bidding'
+
+  const bidderSeat =
+    handState?.bidderSeat ??
+    (biddingState?.highBid
+      ? seatOrder[biddingState.highBid.player]
+      : null)
+
+  const isBidder = Boolean(mySeat && bidderSeat === mySeat.id)
+
+  const handCards = useMemo(
+    () =>
+      normalizeCards(
+        handPrivate?.hand ?? handPrivate?.cards ?? handPrivate?.handCards,
+      ),
+    [handPrivate],
+  )
+
+  const kittyCards = useMemo(
+    () => normalizeCards(handPrivate?.kitty ?? handPrivate?.kittyCards),
+    [handPrivate],
+  )
+
+  const selectedDiscardCards = useMemo(() => {
+    if (!selectedDiscards.length) return []
+    const selected = new Set(selectedDiscards)
+    return handCards.filter((card) => selected.has(cardKey(card)))
+  }, [handCards, selectedDiscards])
+
+  const canDiscard = selectedDiscardCards.length === 5
+
+  useEffect(() => {
+    setSelectedDiscards([])
+  }, [handCards, activePhase])
+
+  const phaseTitle = useMemo(() => {
+    switch (activePhase) {
+      case 'kitty':
+        return 'Kitty Pickup'
+      case 'declareTrump':
+        return 'Declare Trump'
+      case 'trick':
+        return 'Trick Play'
+      case 'score':
+        return 'Scoring'
+      default:
+        return 'Bidding'
+    }
+  }, [activePhase])
+
+  const phaseStatus = useMemo(() => {
+    if (activePhase === 'kitty') {
+      return isBidder
+        ? 'Pick up the kitty, then discard five cards.'
+        : 'Waiting on the bidder to pick up the kitty.'
+    }
+    if (activePhase === 'declareTrump') {
+      return isBidder
+        ? 'Declare a trump color for the hand.'
+        : 'Waiting on the bidder to declare trump.'
+    }
+    if (activePhase === 'trick') {
+      return 'Trick play underway.'
+    }
+    if (activePhase === 'score') {
+      return 'Scoring the hand.'
+    }
+    return 'Bidding in progress.'
+  }, [activePhase, isBidder])
+
+  const currentTrump = useMemo(() => {
+    if (!handState) return null
+    const trumpFromState =
+      handState.trump ??
+      (handState as { trumpColor?: string }).trumpColor ??
+      null
+    return trumpFromState
+  }, [handState])
+
+  const kittyCount = handState?.kittyCount ?? kittyCards.length
+
   const emitBid = (amount: number) => {
     if (!roomCode) return
     const socket = socketRef.current
@@ -298,10 +483,91 @@ function App() {
     socket.emit('game:passPartner', { roomCode })
   }
 
+  const emitPickupKitty = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('hand:pickup', { roomCode })
+  }
+
+  const emitDiscardKitty = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('hand:discard', { roomCode, cards: selectedDiscardCards })
+  }
+
+  const emitDeclareTrump = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('hand:declareTrump', { roomCode, trump: selectedTrump })
+  }
+
+  const toggleDiscardSelection = (card: Card) => {
+    const key = cardKey(card)
+    setSelectedDiscards((current) => {
+      if (current.includes(key)) {
+        return current.filter((item) => item !== key)
+      }
+      if (current.length >= 5) return current
+      return [...current, key]
+    })
+  }
+
   const handleCustomBid = () => {
     const amount = Number(customBid)
     if (!Number.isFinite(amount)) return
     emitBid(amount)
+  }
+
+  const renderCardPill = (card: Card, selectable: boolean) => {
+    const key = cardKey(card)
+    const selected = selectedDiscards.includes(key)
+    const baseClass = `card-pill card-${card.kind === 'rook' ? 'rook' : card.color}`
+    const className = selectable
+      ? `${baseClass} card-select${selected ? ' selected' : ''}`
+      : baseClass
+    const content =
+      card.kind === 'rook' ? (
+        <>
+          <img src={rookCard} alt="Rook" />
+          <span>ROOK</span>
+        </>
+      ) : (
+        <span>{cardLabel(card)}</span>
+      )
+
+    if (!selectable) {
+      return (
+        <div key={key} className={className}>
+          {content}
+        </div>
+      )
+    }
+
+    return (
+      <label key={key} className={className}>
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => toggleDiscardSelection(card)}
+        />
+        {content}
+      </label>
+    )
   }
 
   return (
@@ -442,7 +708,7 @@ function App() {
             })}
           </section>
         </main>
-      ) : (
+      ) : view === 'bidding' ? (
         <main className="bidding">
           {errorMessage ? (
             <div className="error-banner" role="alert">
@@ -556,6 +822,137 @@ function App() {
                 )}
               </ul>
             </div>
+          </section>
+        </main>
+      ) : (
+        <main className="hand">
+          {errorMessage ? (
+            <div className="error-banner" role="alert">
+              {errorMessage}
+            </div>
+          ) : null}
+          <section className="lobby-header">
+            <div>
+              <p className="eyebrow">{phaseTitle}</p>
+              <h1>{roomCode || 'ROOM'}</h1>
+              <p className="muted">{phaseStatus}</p>
+            </div>
+            <div className="lobby-actions">
+              <button className="ghost" onClick={() => setView('lobby')}>
+                Back to Lobby
+              </button>
+            </div>
+          </section>
+
+          <section className="postbid-grid">
+            <div className="bidding-card phase-card">
+              <p className="eyebrow">Phase Info</p>
+              <div className="phase-meta">
+                <div>
+                  <p className="meta-label">Phase</p>
+                  <p className="meta-value">{phaseTitle}</p>
+                </div>
+                <div>
+                  <p className="meta-label">Bidder</p>
+                  <p className="meta-value">{bidderSeat ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="meta-label">Trump</p>
+                  <p className="meta-value">{currentTrump ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="meta-label">Kitty</p>
+                  <p className="meta-value">
+                    {kittyCount ? `${kittyCount} cards` : '—'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {isBidder ? (
+              <div className="bidding-card action-card">
+                <p className="eyebrow">Kitty Actions</p>
+                <p className="muted">Pickup the kitty and discard five cards.</p>
+                <div className="postbid-actions">
+                  <button
+                    className="primary"
+                    onClick={emitPickupKitty}
+                    disabled={activePhase !== 'kitty'}
+                  >
+                    Pickup Kitty
+                  </button>
+                  <div className="discard-row">
+                    <span className="discard-count">
+                      {selectedDiscards.length}/5 selected
+                    </span>
+                    <button
+                      className="ghost"
+                      onClick={emitDiscardKitty}
+                      disabled={activePhase !== 'kitty' || !canDiscard}
+                    >
+                      Discard 5
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bidding-card action-card">
+                <p className="eyebrow">Waiting</p>
+                <p className="muted">{phaseStatus}</p>
+              </div>
+            )}
+
+            {isBidder ? (
+              <div className="bidding-card action-card">
+                <p className="eyebrow">Declare Trump</p>
+                <p className="muted">Choose the trump color for this hand.</p>
+                <div className="trump-options">
+                  {(Object.keys(COLOR_LABELS) as TrumpColor[]).map((color) => (
+                    <button
+                      key={color}
+                      className={selectedTrump === color ? 'primary' : 'ghost'}
+                      onClick={() => setSelectedTrump(color)}
+                      disabled={activePhase !== 'declareTrump'}
+                    >
+                      {COLOR_LABELS[color]}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="primary"
+                  onClick={emitDeclareTrump}
+                  disabled={activePhase !== 'declareTrump'}
+                >
+                  Declare Trump
+                </button>
+              </div>
+            ) : null}
+
+            <div className="bidding-card hand-card">
+              <p className="eyebrow">Your Hand</p>
+              <div className="card-grid">
+                {handCards.length ? (
+                  handCards.map((card) =>
+                    renderCardPill(card, isBidder && activePhase === 'kitty'),
+                  )
+                ) : (
+                  <p className="empty-state">No cards yet.</p>
+                )}
+              </div>
+            </div>
+
+            {isBidder ? (
+              <div className="bidding-card kitty-card">
+                <p className="eyebrow">Kitty</p>
+                {kittyCards.length ? (
+                  <div className="card-grid">
+                    {kittyCards.map((card) => renderCardPill(card, false))}
+                  </div>
+                ) : (
+                  <p className="muted">Kitty is hidden until pickup.</p>
+                )}
+              </div>
+            ) : null}
           </section>
         </main>
       )}
