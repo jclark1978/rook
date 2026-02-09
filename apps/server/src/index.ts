@@ -94,24 +94,24 @@ const emitGameState = (roomCode: string, state: GameState) => {
   io.to(roomCode).emit('game:state', toGamePublicState(state));
 };
 
+const emitPrivateHandToSocket = (roomSocket: { data: { playerId?: string }; emit: Function }, state: GameState) => {
+  const playerId = roomSocket.data.playerId;
+  if (!playerId) return;
+  const playerIndex = state.playerOrder.indexOf(playerId);
+  if (playerIndex === -1) return;
+  const payload: { hand: Card[]; kitty?: Card[] } = {
+    hand: state.hand.hands[playerIndex] ?? [],
+  };
+  if (state.hand.kittyPickedUp && state.hand.bidder === playerIndex && state.phase === 'kitty') {
+    payload.kitty = state.hand.kittyPickedUpCards;
+  }
+  roomSocket.emit('hand:private', payload);
+};
+
 const emitPrivateHands = async (roomCode: string, state: GameState) => {
   const sockets = await io.in(roomCode).fetchSockets();
   for (const roomSocket of sockets) {
-    const playerId = roomSocket.data.playerId;
-    if (!playerId) continue;
-    const playerIndex = state.playerOrder.indexOf(playerId);
-    if (playerIndex === -1) continue;
-    const payload: { hand: Card[]; kitty?: Card[] } = {
-      hand: state.hand.hands[playerIndex] ?? [],
-    };
-    if (
-      state.hand.kittyPickedUp &&
-      state.hand.bidder === playerIndex &&
-      state.phase === 'kitty'
-    ) {
-      payload.kitty = state.hand.kittyPickedUpCards;
-    }
-    roomSocket.emit('hand:private', payload);
+    emitPrivateHandToSocket(roomSocket as any, state);
   }
 };
 
@@ -170,22 +170,32 @@ io.on('connection', (socket) => {
     ({ roomCode, playerId }: RoomJoinPayload, ack?: (payload: RoomAck) => void) => {
       const resolvedPlayerId = socket.data.playerId ?? playerId ?? socket.id;
       socket.data.playerId = resolvedPlayerId;
-      const result = rooms.joinRoom(roomCode.trim().toUpperCase(), resolvedPlayerId);
-    if (!result.ok) {
-      socket.emit('room:error', { message: result.error });
-      ack?.({ ok: false, message: result.error });
-      return;
-    }
+      const normalizedCode = roomCode.trim().toUpperCase();
+      const result = rooms.joinRoom(normalizedCode, resolvedPlayerId);
+      if (!result.ok) {
+        socket.emit('room:error', { message: result.error });
+        ack?.({ ok: false, message: result.error });
+        return;
+      }
 
-    socket.join(result.value.roomCode);
-    io.to(result.value.roomCode).emit('room:state', result.value);
-    ack?.({
-      ok: true,
-      roomCode: result.value.roomCode,
-      playerId: resolvedPlayerId,
-      state: result.value,
-    });
-  });
+      socket.join(result.value.roomCode);
+      io.to(result.value.roomCode).emit('room:state', result.value);
+      ack?.({
+        ok: true,
+        roomCode: result.value.roomCode,
+        playerId: resolvedPlayerId,
+        state: result.value,
+      });
+
+      // If a game is already in progress, immediately sync the joining socket.
+      const gameState = games.getState(normalizedCode);
+      if (gameState) {
+        socket.emit('game:state', toGamePublicState(gameState));
+        socket.emit('hand:state', toHandPublicState(gameState));
+        emitPrivateHandToSocket(socket as any, gameState);
+      }
+    },
+  );
 
   socket.on('room:sit', ({ roomCode, seat }: RoomSitPayload) => {
     const resolvedPlayerId = socket.data.playerId ?? socket.id;
