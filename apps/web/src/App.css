@@ -505,6 +505,23 @@ button.not-ready {
   accent-color: var(--accent);
 }
 
+.card-pill.card-click {
+  cursor: pointer;
+  border: 2px solid var(--border-strong);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-cutout);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.card-pill.card-click:hover {
+  transform: translateY(-1px);
+}
+
+.card-pill.card-click:active {
+  transform: translateY(2px);
+  box-shadow: 0 4px 0 rgba(23, 19, 18, 0.8);
+}
+
 .card-pill.selected {
   box-shadow: 0 0 0 3px rgba(23, 19, 18, 0.2), var(--shadow-cutout);
   background: var(--surface-strong);
@@ -534,6 +551,19 @@ button.not-ready {
   margin: 0.25rem 0 0;
   color: var(--ink-soft);
   font-weight: 600;
+}
+
+.trick-log {
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.8rem;
+  border: 2px dashed var(--border-strong);
+  background: var(--surface);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
 }
 
 .history-list {
