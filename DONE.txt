@@ -1,1 +1,6 @@
 Updated server game state to retain picked-up kitty cards for bidder-only visibility and extended private hand payloads to include kitty cards during kitty/declareTrump phases. Added kittyPickedUpCards tracking and ensured discarded kitty is sent only to bidder after discard.
+
+Web updates:
+- wired game:error to show the error banner alongside room:error
+- tightened kitty pickup/discard and trump declare button disables to require phase + bidder + discard selection
+- show Kitty panel when kitty cards arrive in hand:private even if not marked bidder
