@@ -637,6 +637,17 @@ function App() {
     socket.emit('game:bid', { roomCode, amount })
   }
 
+  const emitClearSeat = (seat: SeatId) => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('room:clearSeat', { roomCode, seat })
+  }
+
   const emitPass = () => {
     if (!roomCode) return
     const socket = socketRef.current
@@ -864,6 +875,24 @@ function App() {
               <span>{seat.label}</span>
               {isDealer ? <span className="dealer-badge">D</span> : null}
               <span className="seat-status">{isOpen ? 'OPEN' : 'TAKEN'}</span>
+              {!isOpen && !isMine ? (
+                <button
+                  type="button"
+                  className="ghost seat-clear"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (
+                      window.confirm(
+                        `Mark ${seat.label} as dropped? This only works if they are truly disconnected.`,
+                      )
+                    ) {
+                      emitClearSeat(seat.id)
+                    }
+                  }}
+                >
+                  Drop
+                </button>
+              ) : null}
             </>
           )
 

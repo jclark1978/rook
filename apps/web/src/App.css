@@ -332,6 +332,11 @@ button.ghost {
   color: var(--ink-soft);
 }
 
+.seat-clear {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.65rem;
+}
+
 .seat-pill.is-mine {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(213, 154, 64, 0.3);
