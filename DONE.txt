@@ -5,3 +5,7 @@ Trick play:
 Kitty visibility update:
 - Server: stop sending kitty cards in private payloads after discard; only send picked-up kitty during kitty phase.
 - Web: hide kitty panel for bidder once phase advances past kitty.
+
+Kitty points notice:
+- Server: after kitty discard, detect whether any point cards are in kitty and broadcast `info:notice` "There are points in the kitty" (no details), once per hand.
+- Web: show notice banner/toast and auto-dismiss.

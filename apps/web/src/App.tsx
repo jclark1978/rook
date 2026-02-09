@@ -161,6 +161,10 @@ function App() {
   const [customBid, setCustomBid] = useState('')
   const [selectedDiscards, setSelectedDiscards] = useState<string[]>([])
   const [selectedTrump, setSelectedTrump] = useState<TrumpColor>('red')
+  const [infoNotice, setInfoNotice] = useState<{
+    id: number
+    text: string
+  } | null>(null)
   const socketRef = useRef<Socket | null>(null)
 
   useEffect(() => {
@@ -227,6 +231,11 @@ function App() {
         setErrorMessage(payload.message)
       }
     }
+    const handleInfoNotice = (payload: { text?: string }) => {
+      if (payload?.text) {
+        setInfoNotice({ id: Date.now(), text: payload.text })
+      }
+    }
 
     socket.on('connect', handleConnect)
     socket.on('disconnect', handleDisconnect)
@@ -237,6 +246,7 @@ function App() {
     socket.on('hand:private', handleHandPrivate)
     socket.on('room:error', handleRoomError)
     socket.on('game:error', handleGameError)
+    socket.on('info:notice', handleInfoNotice)
 
     return () => {
       socket.off('connect', handleConnect)
@@ -248,9 +258,18 @@ function App() {
       socket.off('hand:private', handleHandPrivate)
       socket.off('room:error', handleRoomError)
       socket.off('game:error', handleGameError)
+      socket.off('info:notice', handleInfoNotice)
       socket.disconnect()
     }
   }, [])
+
+  useEffect(() => {
+    if (!infoNotice) return
+    const timeout = window.setTimeout(() => {
+      setInfoNotice(null)
+    }, 6000)
+    return () => window.clearTimeout(timeout)
+  }, [infoNotice])
 
   const statusLabel = useMemo(() => {
     if (connectionStatus === 'connected') return 'Connected'
@@ -654,6 +673,23 @@ function App() {
           <span>{statusLabel}</span>
         </div>
       </header>
+      {infoNotice ? (
+        <div
+          key={infoNotice.id}
+          className="info-banner"
+          role="status"
+          aria-live="polite"
+        >
+          <span>{infoNotice.text}</span>
+          <button
+            type="button"
+            className="ghost info-dismiss"
+            onClick={() => setInfoNotice(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
       {view === 'home' ? (
         <main className="home">

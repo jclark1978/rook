@@ -8,7 +8,7 @@ import {
   type PlayerId,
 } from '@rook/engine/src/bidding.js';
 import type { Card } from '@rook/engine/src/cards.js';
-import { cardId } from '@rook/engine/src/cards.js';
+import { cardId, isPointCard } from '@rook/engine/src/cards.js';
 import type { DeckMode } from '@rook/engine/src/index.js';
 import { buildDeck, deal, mulberry32, shuffle } from '@rook/engine/src/deck.js';
 import { determineTrickWinner, getLegalPlays, type TrumpColor } from '@rook/engine/src/trick.js';
@@ -24,6 +24,7 @@ export type HandState = {
   kittySize: number;
   kitty: Card[];
   kittyPickedUpCards: Card[];
+  pointsNoticeSent: boolean;
   hands: Card[][];
   trickCards: Array<{ seat: Seat; card: Card }>;
   trickLeadColor?: TrumpColor;
@@ -62,6 +63,11 @@ export type GameResult<T> =
 
 type Game = {
   state: GameState;
+};
+
+type KittyDiscardOutcome = {
+  state: GameState;
+  pointsNotice: boolean;
 };
 
 const KITTY_SIZE = 5;
@@ -142,6 +148,7 @@ export const createGameState = (
     kittySize: KITTY_SIZE,
     kitty,
     kittyPickedUpCards: [],
+    pointsNoticeSent: false,
     hands,
     trickCards: [],
     trickLeadColor: undefined,
@@ -321,7 +328,11 @@ export class GameStore {
     return { ok: true, value: nextState };
   }
 
-  discardKitty(roomCode: string, playerId: string, cards: Card[]): GameResult<GameState> {
+  discardKitty(
+    roomCode: string,
+    playerId: string,
+    cards: Card[],
+  ): GameResult<KittyDiscardOutcome> {
     const game = this.games.get(roomCode);
     if (!game) return { ok: false, error: 'game missing' };
     const { state } = game;
@@ -344,6 +355,9 @@ export class GameStore {
     const hands = state.hand.hands.map((hand) => hand.slice());
     hands[bidderIndex] = nextHandResult.value;
 
+    const pointsInKitty = cards.some((card) => isPointCard(card));
+    const pointsNotice = pointsInKitty && !state.hand.pointsNoticeSent;
+
     const nextState: GameState = {
       ...state,
       phase: 'declareTrump',
@@ -354,12 +368,13 @@ export class GameStore {
         phase: 'declareTrump',
         kitty: cards.slice(),
         kittyPickedUpCards: [],
+        pointsNoticeSent: state.hand.pointsNoticeSent || pointsInKitty,
         hands,
       },
     };
 
     game.state = nextState;
-    return { ok: true, value: nextState };
+    return { ok: true, value: { state: nextState, pointsNotice } };
   }
 
   declareTrump(

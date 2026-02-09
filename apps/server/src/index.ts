@@ -283,9 +283,13 @@ io.on('connection', (socket) => {
       return;
     }
 
-    emitGameState(normalizedCode, result.value);
-    emitHandState(normalizedCode, result.value);
-    await emitPrivateHands(normalizedCode, result.value);
+    if (result.value.pointsNotice) {
+      io.to(normalizedCode).emit('info:notice', { text: 'There are points in the kitty' });
+    }
+
+    emitGameState(normalizedCode, result.value.state);
+    emitHandState(normalizedCode, result.value.state);
+    await emitPrivateHands(normalizedCode, result.value.state);
   });
 
   socket.on('trump:declare', ({ roomCode, trump }: TrumpDeclarePayload) => {
