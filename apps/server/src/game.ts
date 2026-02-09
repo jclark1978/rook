@@ -464,7 +464,8 @@ export class GameStore {
     );
 
     const nextLeadColor =
-      state.hand.trickLeadColor ?? (card.kind === 'suit' ? card.color : undefined);
+      state.hand.trickLeadColor ??
+      (card.kind === 'suit' ? card.color : card.kind === 'rook' ? trump : undefined);
     const nextTrickCards = [
       ...state.hand.trickCards,
       { seat: state.seatOrder[playerIndex], card },

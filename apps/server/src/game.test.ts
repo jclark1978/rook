@@ -261,6 +261,49 @@ describe('Game reducer', () => {
     }
   });
 
+  it('treats rook lead as trump lead for follow-suit', () => {
+    const createResult = createGameState('ROOM9', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    const store = new GameStore();
+
+    (store as { games: Map<string, { state: typeof state }> }).games.set('ROOM9', {
+      state: {
+        ...state,
+        phase: 'trick',
+        whoseTurnSeat: state.seatOrder[0],
+        whoseTurnPlayerId: state.playerOrder[0],
+        hand: {
+          ...state.hand,
+          phase: 'trick',
+          trump: 'green',
+          trickCards: [],
+          trickLeadColor: undefined,
+          hands: [
+            [{ kind: 'rook' }],
+            [suitCard('green', 10), suitCard('red', 9)],
+            [suitCard('yellow', 3)],
+            [suitCard('black', 2)],
+          ],
+        },
+      },
+    });
+
+    const leadPlay = store.playCard('ROOM9', state.playerOrder[0], { kind: 'rook' });
+    expect(leadPlay.ok).toBe(true);
+
+    const illegalPlay = store.playCard('ROOM9', state.playerOrder[1], suitCard('red', 9));
+    expect(illegalPlay.ok).toBe(false);
+    if (!illegalPlay.ok) {
+      expect(illegalPlay.error).toBe('illegal play');
+    }
+
+    const legalPlay = store.playCard('ROOM9', state.playerOrder[1], suitCard('green', 10));
+    expect(legalPlay.ok).toBe(true);
+  });
+
   it('scores a set hand when the bidding team misses', () => {
     const createResult = createGameState('ROOM7', createSeats());
     expect(createResult.ok).toBe(true);
