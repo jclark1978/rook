@@ -75,6 +75,7 @@ type HandPublicState = {
   trump?: string | null
   kittyCount?: number
   whoseTurnSeat?: SeatId | null
+  trickCards?: unknown[]
 }
 
 type HandPrivateState = {
@@ -404,6 +405,11 @@ function App() {
     [handPrivate],
   )
 
+  const trickCards = useMemo(
+    () => normalizeCards(handState?.trickCards),
+    [handState],
+  )
+
   const selectedDiscardCards = useMemo(() => {
     if (!selectedDiscards.length) return []
     const selected = new Set(selectedDiscards)
@@ -415,6 +421,22 @@ function App() {
   useEffect(() => {
     setSelectedDiscards([])
   }, [handCards, activePhase])
+
+  const [trickLog, setTrickLog] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (activePhase !== 'trick') {
+      setTrickLog(null)
+      return
+    }
+    if (trickCards.length === 4) {
+      setTrickLog('Trick complete. Clearing for the next lead.')
+      return
+    }
+    if (trickCards.length === 0) {
+      setTrickLog(null)
+    }
+  }, [activePhase, trickCards.length])
 
   const phaseTitle = useMemo(() => {
     switch (activePhase) {
@@ -528,6 +550,17 @@ function App() {
     socket.emit('trump:declare', { roomCode, trump: selectedTrump })
   }
 
+  const emitPlayCard = (card: Card) => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('play:card', { roomCode, card })
+  }
+
   const toggleDiscardSelection = (card: Card) => {
     const key = cardKey(card)
     setSelectedDiscards((current) => {
@@ -545,13 +578,20 @@ function App() {
     emitBid(amount)
   }
 
-  const renderCardPill = (card: Card, selectable: boolean) => {
+  const renderCardPill = (
+    card: Card,
+    selectable: boolean,
+    clickable = false,
+    onClick?: (card: Card) => void,
+  ) => {
     const key = cardKey(card)
     const selected = selectedDiscards.includes(key)
     const baseClass = `card-pill card-${card.kind === 'rook' ? 'rook' : card.color}`
     const className = selectable
       ? `${baseClass} card-select${selected ? ' selected' : ''}`
-      : baseClass
+      : clickable
+        ? `${baseClass} card-click`
+        : baseClass
     const content =
       card.kind === 'rook' ? (
         <>
@@ -570,15 +610,36 @@ function App() {
       )
     }
 
+    if (!selectable && !clickable) {
+      return (
+        <div key={key} className={className}>
+          {content}
+        </div>
+      )
+    }
+
+    if (selectable) {
+      return (
+        <label key={key} className={className}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => toggleDiscardSelection(card)}
+          />
+          {content}
+        </label>
+      )
+    }
+
     return (
-      <label key={key} className={className}>
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => toggleDiscardSelection(card)}
-        />
+      <button
+        key={key}
+        type="button"
+        className={className}
+        onClick={() => onClick?.(card)}
+      >
         {content}
-      </label>
+      </button>
     )
   }
 
@@ -881,6 +942,30 @@ function App() {
               </div>
             </div>
 
+            {activePhase === 'trick' ? (
+              <div className="bidding-card trick-card">
+                <p className="eyebrow">Trick Pile</p>
+                <div className="phase-meta">
+                  <div>
+                    <p className="meta-label">Whose turn</p>
+                    <p className="meta-value">{handState?.whoseTurnSeat ?? '—'}</p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Cards in trick</p>
+                    <p className="meta-value">{trickCards.length}</p>
+                  </div>
+                </div>
+                <div className="card-grid">
+                  {trickCards.length ? (
+                    trickCards.map((card) => renderCardPill(card, false))
+                  ) : (
+                    <p className="empty-state">No cards played yet.</p>
+                  )}
+                </div>
+                {trickLog ? <p className="trick-log">{trickLog}</p> : null}
+              </div>
+            ) : null}
+
             {isBidder ? (
               <div className="bidding-card action-card">
                 <p className="eyebrow">Kitty Actions</p>
@@ -944,9 +1029,17 @@ function App() {
               <p className="eyebrow">Your Hand</p>
               <div className="card-grid">
                 {handCards.length ? (
-                  handCards.map((card) =>
-                    renderCardPill(card, isBidder && activePhase === 'kitty'),
-                  )
+                  handCards.map((card) => {
+                    const isTrickTurn =
+                      activePhase === 'trick' &&
+                      mySeat?.id &&
+                      handState?.whoseTurnSeat === mySeat.id
+                    return isBidder && activePhase === 'kitty'
+                      ? renderCardPill(card, true)
+                      : isTrickTurn
+                        ? renderCardPill(card, false, true, emitPlayCard)
+                        : renderCardPill(card, false)
+                  })
                 ) : (
                   <p className="empty-state">No cards yet.</p>
                 )}
