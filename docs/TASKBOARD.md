@@ -57,6 +57,11 @@ Format: keep tasks small enough to finish in ~20–60 minutes.
   - defenders always get their points
   - tests verifying totals sum to 200 and contract math
 
+## Next session notes (Jeff)
+- (3) Clicking a card in trick phase should play it; verify turn gating + server event, fix if still inert.
+- (4) After discard completes, kitty should be hidden from bidder too (memory-only advantage).
+- (5) If any point cards are in the kitty after discard, notify all players: “There are points in the kitty” (no details).
+
 ## Integration milestones
 - **M1 (worth checking site):** Lobby works end-to-end (T1 + T2)
 - **M2:** Bidding playable end-to-end (M1 + T3 + minimal UI)
