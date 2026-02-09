@@ -306,6 +306,7 @@ button.ghost {
 .seat-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   padding: 0.4rem 0.75rem;
   border-radius: 999px;
@@ -315,6 +316,20 @@ button.ghost {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-size: 0.75rem;
+}
+
+.seat-pill.is-clickable {
+  cursor: pointer;
+}
+
+.seat-pill.is-clickable:hover {
+  filter: brightness(0.98);
+}
+
+.seat-status {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
 }
 
 .seat-pill.is-mine {

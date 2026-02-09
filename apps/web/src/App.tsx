@@ -845,20 +845,50 @@ function App() {
     )
   }
 
-  const renderSeatStrip = () => (
-    <div className="seat-strip" aria-label="Table seats">
-      {seats.map((seat) => {
-        const isMine = roomState?.seats?.[seat.id] === playerId
-        const isDealer = dealerSeat === seat.id
-        return (
-          <div key={seat.id} className={`seat-pill${isMine ? ' is-mine' : ''}`}>
-            <span>{seat.label}</span>
-            {isDealer ? <span className="dealer-badge">D</span> : null}
-          </div>
-        )
-      })}
-    </div>
-  )
+  const renderSeatStrip = () => {
+    const allowSeatPick = Boolean(roomState) && !mySeat
+
+    return (
+      <div className="seat-strip" aria-label="Table seats">
+        {seats.map((seat) => {
+          const owner = roomState?.seats?.[seat.id] ?? null
+          const isMine = owner === playerId
+          const isOpen = !owner
+          const isDealer = dealerSeat === seat.id
+          const className = `seat-pill${isMine ? ' is-mine' : ''}${
+            allowSeatPick && isOpen ? ' is-clickable' : ''
+          }`
+
+          const content = (
+            <>
+              <span>{seat.label}</span>
+              {isDealer ? <span className="dealer-badge">D</span> : null}
+              <span className="seat-status">{isOpen ? 'OPEN' : 'TAKEN'}</span>
+            </>
+          )
+
+          if (allowSeatPick && isOpen) {
+            return (
+              <button
+                key={seat.id}
+                type="button"
+                className={className}
+                onClick={() => handleSeat(seat.id)}
+              >
+                {content}
+              </button>
+            )
+          }
+
+          return (
+            <div key={seat.id} className={className}>
+              {content}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <div className="app-shell">
