@@ -221,6 +221,11 @@ function App() {
         setErrorMessage(payload.message)
       }
     }
+    const handleGameError = (payload: { message?: string }) => {
+      if (payload?.message) {
+        setErrorMessage(payload.message)
+      }
+    }
 
     socket.on('connect', handleConnect)
     socket.on('disconnect', handleDisconnect)
@@ -230,6 +235,7 @@ function App() {
     socket.on('hand:state', handleHandState)
     socket.on('hand:private', handleHandPrivate)
     socket.on('room:error', handleRoomError)
+    socket.on('game:error', handleGameError)
 
     return () => {
       socket.off('connect', handleConnect)
@@ -240,6 +246,7 @@ function App() {
       socket.off('hand:state', handleHandState)
       socket.off('hand:private', handleHandPrivate)
       socket.off('room:error', handleRoomError)
+      socket.off('game:error', handleGameError)
       socket.disconnect()
     }
   }, [])
@@ -882,7 +889,7 @@ function App() {
                   <button
                     className="primary"
                     onClick={emitPickupKitty}
-                    disabled={activePhase !== 'kitty'}
+                    disabled={activePhase !== 'kitty' || !isBidder}
                   >
                     Pickup Kitty
                   </button>
@@ -893,7 +900,7 @@ function App() {
                     <button
                       className="ghost"
                       onClick={emitDiscardKitty}
-                      disabled={activePhase !== 'kitty' || !canDiscard}
+                      disabled={activePhase !== 'kitty' || !isBidder || !canDiscard}
                     >
                       Discard 5
                     </button>
@@ -917,7 +924,7 @@ function App() {
                       key={color}
                       className={selectedTrump === color ? 'primary' : 'ghost'}
                       onClick={() => setSelectedTrump(color)}
-                      disabled={activePhase !== 'declareTrump'}
+                      disabled={activePhase !== 'declareTrump' || !isBidder}
                     >
                       {COLOR_LABELS[color]}
                     </button>
@@ -926,7 +933,7 @@ function App() {
                 <button
                   className="primary"
                   onClick={emitDeclareTrump}
-                  disabled={activePhase !== 'declareTrump'}
+                  disabled={activePhase !== 'declareTrump' || !isBidder}
                 >
                   Declare Trump
                 </button>
@@ -946,7 +953,7 @@ function App() {
               </div>
             </div>
 
-            {isBidder ? (
+            {isBidder || kittyCards.length > 0 ? (
               <div className="bidding-card kitty-card">
                 <p className="eyebrow">Kitty</p>
                 {kittyCards.length ? (

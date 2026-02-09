@@ -1,0 +1,3 @@
+- wired game:error to show the error banner alongside room:error
+- tightened kitty pickup/discard and trump declare button disables to require phase + bidder + discard selection
+- show Kitty panel when kitty cards arrive in hand:private even if not marked bidder
