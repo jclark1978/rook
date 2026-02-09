@@ -9,3 +9,7 @@ Kitty visibility update:
 Kitty points notice:
 - Server: after kitty discard, detect whether any point cards are in kitty and broadcast `info:notice` "There are points in the kitty" (no details), once per hand.
 - Web: show notice banner/toast and auto-dismiss.
+
+T23:
+- Server: track captured cards, last trick team, and cumulative game score; detect end-of-hand and apply engine scoring (last trick + kitty points + contract resolution) after final trick.
+- Tests: added set and made hand scoring scenarios to validate score accumulation and phase transition.
