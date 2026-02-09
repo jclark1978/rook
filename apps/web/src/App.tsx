@@ -3,7 +3,7 @@ import { io, type Socket } from 'socket.io-client'
 import rookCard from './assets/rook-card.jpg'
 import './App.css'
 
-type View = 'home' | 'lobby'
+type View = 'home' | 'lobby' | 'bidding'
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'connecting'
 
@@ -33,6 +33,37 @@ type RoomAck =
   | { ok: true; roomCode: string; playerId: string; state: RoomState }
   | { ok: false; message: string }
 
+type BiddingHistoryEntry = {
+  type: 'bid' | 'pass' | 'passPartner'
+  player: number
+  amount?: number
+}
+
+type BiddingState = {
+  currentPlayer?: number
+  minBid?: number
+  step?: number
+  highBid?: { player: number; amount: number } | null
+  history?: BiddingHistoryEntry[]
+  passPartnerAllowed?: boolean
+  passPartnerUsed?: [boolean, boolean]
+}
+
+type GameState = {
+  roomCode?: string
+  phase?: string
+  bidding?: BiddingState
+  currentPlayer?: number
+  minBid?: number
+  step?: number
+  highBid?: { player: number; amount: number } | null
+  history?: BiddingHistoryEntry[]
+  passPartnerAllowed?: boolean
+  passPartnerUsed?: [boolean, boolean]
+}
+
+const seatOrder: SeatId[] = seats.map((seat) => seat.id)
+
 function App() {
   const [view, setView] = useState<View>('home')
   const [roomCode, setRoomCode] = useState('')
@@ -40,8 +71,10 @@ function App() {
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>('connecting')
   const [roomState, setRoomState] = useState<RoomState | null>(null)
+  const [gameState, setGameState] = useState<GameState | null>(null)
   const [playerId, setPlayerId] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [customBid, setCustomBid] = useState('')
   const socketRef = useRef<Socket | null>(null)
 
   useEffect(() => {
@@ -67,7 +100,15 @@ function App() {
     const handleRoomState = (state: RoomState) => {
       setRoomState(state)
       setRoomCode(state.roomCode)
-      setView('lobby')
+      setView((current) => (current === 'home' ? 'lobby' : current))
+      setErrorMessage('')
+    }
+    const handleGameState = (state: GameState) => {
+      setGameState(state)
+      if (state.roomCode) {
+        setRoomCode(state.roomCode)
+      }
+      setView('bidding')
       setErrorMessage('')
     }
     const handleRoomError = (payload: { message?: string }) => {
@@ -80,6 +121,7 @@ function App() {
     socket.on('disconnect', handleDisconnect)
     socket.on('connect_error', handleError)
     socket.on('room:state', handleRoomState)
+    socket.on('game:state', handleGameState)
     socket.on('room:error', handleRoomError)
 
     return () => {
@@ -87,6 +129,7 @@ function App() {
       socket.off('disconnect', handleDisconnect)
       socket.off('connect_error', handleError)
       socket.off('room:state', handleRoomState)
+      socket.off('game:state', handleGameState)
       socket.off('room:error', handleRoomError)
       socket.disconnect()
     }
@@ -158,6 +201,107 @@ function App() {
     }
     setErrorMessage('')
     socket.emit('room:ready', { roomCode, ready })
+  }
+
+  const handleStartGame = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('game:start', { roomCode })
+  }
+
+  const biddingState: BiddingState | null = useMemo(() => {
+    if (!gameState) return null
+    if (gameState.bidding) return gameState.bidding
+    const hasBiddingShape =
+      typeof gameState.currentPlayer === 'number' ||
+      Boolean(gameState.highBid) ||
+      Boolean(gameState.history?.length)
+    if (!hasBiddingShape) return null
+    return {
+      currentPlayer: gameState.currentPlayer,
+      minBid: gameState.minBid,
+      step: gameState.step,
+      highBid: gameState.highBid ?? null,
+      history: gameState.history ?? [],
+      passPartnerAllowed: gameState.passPartnerAllowed,
+      passPartnerUsed: gameState.passPartnerUsed,
+    }
+  }, [gameState])
+
+  const minBid = biddingState?.minBid ?? 100
+  const bidStep = biddingState?.step ?? 5
+  const highBidAmount = biddingState?.highBid?.amount ?? 0
+  const bidIncrement = Math.max(bidStep, 5)
+  const quickBidAmount = Math.max(minBid, highBidAmount + bidIncrement)
+
+  const mySeat = useMemo(
+    () => seats.find((seat) => roomState?.seats?.[seat.id] === playerId),
+    [roomState, playerId],
+  )
+
+  const currentPlayerSeat = useMemo(() => {
+    if (typeof biddingState?.currentPlayer !== 'number') return null
+    return seatOrder[biddingState.currentPlayer] ?? null
+  }, [biddingState])
+
+  const isMyTurn = Boolean(
+    currentPlayerSeat && roomState?.seats?.[currentPlayerSeat] === playerId,
+  )
+
+  const passPartnerAllowed =
+    biddingState?.passPartnerAllowed ??
+    (() => {
+      if (!biddingState?.highBid) return false
+      if (typeof biddingState.currentPlayer !== 'number') return false
+      if (!biddingState.passPartnerUsed) return false
+      const partner = (biddingState.currentPlayer + 2) % 4
+      if (biddingState.highBid.player !== partner) return false
+      const team = biddingState.currentPlayer % 2
+      return !biddingState.passPartnerUsed[team]
+    })()
+
+  const emitBid = (amount: number) => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('game:bid', { roomCode, amount })
+  }
+
+  const emitPass = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('game:pass', { roomCode })
+  }
+
+  const emitPassPartner = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('game:passPartner', { roomCode })
+  }
+
+  const handleCustomBid = () => {
+    const amount = Number(customBid)
+    if (!Number.isFinite(amount)) return
+    emitBid(amount)
   }
 
   return (
@@ -232,7 +376,7 @@ function App() {
             </div>
           </section>
         </main>
-      ) : (
+      ) : view === 'lobby' ? (
         <main className="lobby">
           {errorMessage ? (
             <div className="error-banner" role="alert">
@@ -245,9 +389,16 @@ function App() {
               <h1>{roomCode || 'ROOM'}</h1>
               <p className="muted">Share this code to bring players in.</p>
             </div>
-            <button className="ghost" onClick={() => setView('home')}>
-              Back to Home
-            </button>
+            <div className="lobby-actions">
+              {mySeat && roomState?.ready?.[playerId] ? (
+                <button className="primary" onClick={handleStartGame}>
+                  Start Game
+                </button>
+              ) : null}
+              <button className="ghost" onClick={() => setView('home')}>
+                Back to Home
+              </button>
+            </div>
           </section>
 
           <section className="seat-grid">
@@ -289,6 +440,122 @@ function App() {
                 </div>
               )
             })}
+          </section>
+        </main>
+      ) : (
+        <main className="bidding">
+          {errorMessage ? (
+            <div className="error-banner" role="alert">
+              {errorMessage}
+            </div>
+          ) : null}
+          <section className="lobby-header">
+            <div>
+              <p className="eyebrow">Bidding</p>
+              <h1>{roomCode || 'ROOM'}</h1>
+              <p className="muted">Open bids are visible to everyone.</p>
+            </div>
+            <div className="lobby-actions">
+              <button className="ghost" onClick={() => setView('lobby')}>
+                Back to Lobby
+              </button>
+            </div>
+          </section>
+
+          <section className="bidding-grid">
+            <div className="bidding-card">
+              <p className="eyebrow">High Bid</p>
+              <div className="bidding-highlight">
+                <p className="bidding-amount">
+                  {biddingState?.highBid ? biddingState.highBid.amount : '—'}
+                </p>
+                <p className="bidding-seat">
+                  {biddingState?.highBid
+                    ? seatOrder[biddingState.highBid.player] ?? 'Unknown seat'
+                    : 'No bids yet'}
+                </p>
+              </div>
+              <div className="bidding-meta">
+                <div>
+                  <p className="meta-label">Whose turn</p>
+                  <p className="meta-value">
+                    {currentPlayerSeat ?? 'Waiting'}{' '}
+                    {isMyTurn ? '(You)' : ''}
+                  </p>
+                </div>
+                <div>
+                  <p className="meta-label">Bid step</p>
+                  <p className="meta-value">{bidStep}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bidding-card">
+              <p className="eyebrow">Your Action</p>
+              <div className="bidding-actions">
+                <button
+                  className="primary"
+                  onClick={() => emitBid(quickBidAmount)}
+                  disabled={!isMyTurn}
+                >
+                  Bid +{bidIncrement} ({quickBidAmount})
+                </button>
+                <div className="bid-input-row">
+                  <input
+                    type="number"
+                    min={minBid}
+                    step={bidStep}
+                    value={customBid}
+                    onChange={(event) => setCustomBid(event.target.value)}
+                    placeholder={`Custom (min ${minBid})`}
+                  />
+                  <button
+                    className="ghost"
+                    onClick={handleCustomBid}
+                    disabled={!isMyTurn || !customBid}
+                  >
+                    Bid
+                  </button>
+                </div>
+                <div className="bidding-secondary">
+                  <button className="ghost" onClick={emitPass} disabled={!isMyTurn}>
+                    Pass
+                  </button>
+                  <button
+                    className="ghost"
+                    onClick={emitPassPartner}
+                    disabled={!isMyTurn || !passPartnerAllowed}
+                  >
+                    Pass-Partner
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bidding-card bidding-history">
+              <p className="eyebrow">Bid History</p>
+              <ul className="history-list">
+                {(biddingState?.history?.length ?? 0) > 0 ? (
+                  biddingState?.history?.map((entry, index) => {
+                    const seatLabel = seatOrder[entry.player] ?? 'Unknown seat'
+                    const actionLabel =
+                      entry.type === 'bid'
+                        ? `Bid ${entry.amount}`
+                        : entry.type === 'pass'
+                          ? 'Pass'
+                          : 'Pass-Partner'
+                    return (
+                      <li key={`${entry.type}-${index}`}>
+                        <span>{seatLabel}</span>
+                        <span>{actionLabel}</span>
+                      </li>
+                    )
+                  })
+                ) : (
+                  <li className="history-empty">No bids yet.</li>
+                )}
+              </ul>
+            </div>
           </section>
         </main>
       )}
