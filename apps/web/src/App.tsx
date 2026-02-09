@@ -201,7 +201,11 @@ function App() {
       if (state.roomCode) {
         setRoomCode(state.roomCode)
       }
-      setView('hand')
+      // Server may emit hand:state even during bidding (for private-hand plumbing).
+      // Don't force the UI out of the bidding screen until the phase actually advances.
+      if (state.phase && state.phase !== 'bidding') {
+        setView('hand')
+      }
       setErrorMessage('')
     }
     const handleHandPrivate = (state: HandPrivateState) => {
@@ -209,7 +213,8 @@ function App() {
       if (state.roomCode) {
         setRoomCode(state.roomCode)
       }
-      setView((current) => (current === 'bidding' ? 'hand' : current))
+      // Don't auto-switch out of bidding just because we received a private hand payload.
+      setView((current) => current)
     }
     const handleRoomError = (payload: { message?: string }) => {
       if (payload?.message) {
