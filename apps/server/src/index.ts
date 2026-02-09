@@ -23,6 +23,7 @@ const io = new Server(httpServer, {
 type RoomCreatePayload = { roomCode?: string; playerId?: string };
 type RoomJoinPayload = { roomCode: string; playerId?: string };
 type RoomSitPayload = { roomCode: string; seat: string };
+type RoomClearSeatPayload = { roomCode: string; seat: string };
 type RoomReadyPayload = { roomCode: string; ready: boolean };
 type RoomAck =
   | { ok: true; roomCode: string; playerId: string; state: RoomState }
@@ -96,6 +97,16 @@ const emitHandState = (roomCode: string, state: GameState) => {
 
 const emitGameState = (roomCode: string, state: GameState) => {
   io.to(roomCode).emit('game:state', toGamePublicState(state));
+};
+
+const connectedPlayerIdsInRoom = async (roomCode: string): Promise<Set<string>> => {
+  const sockets = await io.in(roomCode).fetchSockets();
+  const ids = new Set<string>();
+  for (const roomSocket of sockets) {
+    const pid = roomSocket.data.playerId;
+    if (typeof pid === 'string' && pid.trim()) ids.add(pid);
+  }
+  return ids;
 };
 
 const emitPrivateHandToSocket = (roomSocket: { data: { playerId?: string }; emit: Function }, state: GameState) => {
@@ -261,6 +272,40 @@ io.on('connection', (socket) => {
     }
 
     io.to(normalizedCode).emit('room:state', result.value);
+  });
+
+  socket.on('room:clearSeat', async ({ roomCode, seat }: RoomClearSeatPayload) => {
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const roomState = rooms.getRoomState(normalizedCode);
+    if (!roomState) {
+      socket.emit('room:error', { message: 'room missing' });
+      return;
+    }
+
+    const seatKey = seat as keyof typeof roomState.seats;
+    const occupant = roomState.seats[seatKey as any] ?? null;
+    if (!occupant) {
+      // already open
+      return;
+    }
+
+    const connected = await connectedPlayerIdsInRoom(normalizedCode);
+    if (connected.has(occupant)) {
+      socket.emit('room:error', { message: 'player still connected' });
+      return;
+    }
+
+    const cleared = rooms.removePlayer(normalizedCode, occupant);
+    if (!cleared.ok) {
+      socket.emit('room:error', { message: cleared.error });
+      return;
+    }
+
+    io.to(normalizedCode).emit('room:state', cleared.value);
+
+    // Note: we do not mutate the active game state here. If the dropped seat was the current turn,
+    // the hand is effectively paused until someone takes the seat. When a new player sits,
+    // the server will rebind the seat in the active game.
   });
 
   socket.on('room:ready', ({ roomCode, ready }: RoomReadyPayload) => {
