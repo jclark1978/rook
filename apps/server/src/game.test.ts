@@ -23,15 +23,16 @@ describe('Game reducer', () => {
     if (!createResult.ok) return;
 
     const state = createResult.value;
-    expect(state.whoseTurnPlayerId).toBe('player-a');
+    // Bidding starts to the dealer's left. Default dealer is seat index 0, so first bidder is index 1.
+    expect(state.whoseTurnPlayerId).toBe('player-b');
 
-    const afterBid = reduceGameState(state, 'player-a', { type: 'bid', amount: 100 });
+    const afterBid = reduceGameState(state, 'player-b', { type: 'bid', amount: 100 });
     expect(afterBid.bidding.highBid?.amount).toBe(100);
-    expect(afterBid.whoseTurnPlayerId).toBe('player-b');
+    expect(afterBid.whoseTurnPlayerId).toBe('player-c');
 
-    const afterPass = reduceGameState(afterBid, 'player-b', { type: 'pass' });
-    expect(afterPass.bidding.passed[1]).toBe(true);
-    expect(afterPass.whoseTurnPlayerId).toBe('player-c');
+    const afterPass = reduceGameState(afterBid, 'player-c', { type: 'pass' });
+    expect(afterPass.bidding.passed[2]).toBe(true);
+    expect(afterPass.whoseTurnPlayerId).toBe('player-d');
   });
 
   it('starts bidding from the seat left of the dealer', () => {
@@ -291,8 +292,8 @@ describe('Game reducer', () => {
           kitty: kittyCards,
           bidder: 0,
           winningBid: { player: 0, amount: 120 },
-          capturedByTeam: [[], []],
-          lastTrickTeam: null,
+          capturedByTeam: { T1: [], T2: [] },
+          lastTrickWinnerTeam: null,
         },
         gameScore: [0, 0],
       },
@@ -341,8 +342,8 @@ describe('Game reducer', () => {
           kitty: kittyCards,
           bidder: 0,
           winningBid: { player: 0, amount: 40 },
-          capturedByTeam: [[], []],
-          lastTrickTeam: null,
+          capturedByTeam: { T1: [], T2: [] },
+          lastTrickWinnerTeam: null,
         },
         gameScore: [0, 0],
       },

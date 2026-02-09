@@ -21,6 +21,7 @@ export type GamePhase = 'bidding' | 'kitty' | 'declareTrump' | 'trick' | 'score'
 export type HandState = {
   phase: GamePhase;
   deckMode: DeckMode;
+  dealerSeat: Seat;
   startedAt: number;
   seed: number;
   kittySize: number;
@@ -34,8 +35,8 @@ export type HandState = {
   winningBid: Bid | null;
   trump?: TrumpColor;
   kittyPickedUp: boolean;
-  capturedByTeam: [Card[], Card[]];
-  lastTrickTeam: 0 | 1 | null;
+  capturedByTeam: { T1: Card[]; T2: Card[] };
+  lastTrickWinnerTeam: 'T1' | 'T2' | null;
   handPoints: [number, number] | null;
   handScores: [number, number] | null;
   biddersSet: boolean | null;
@@ -46,11 +47,14 @@ export type GameState = {
   phase: GamePhase;
   seatOrder: Seat[];
   playerOrder: string[];
+  dealerSeat: Seat;
   bidding: BiddingState;
   hand: HandState;
   whoseTurnSeat: Seat;
   whoseTurnPlayerId: string;
   scores: [number, number];
+  // Alias used by tests/UI
+  gameScore: [number, number];
   dealerIndex: PlayerId;
 };
 
@@ -78,6 +82,8 @@ type KittyDiscardOutcome = {
   state: GameState;
   pointsNotice: boolean;
 };
+
+const teamKey = (team: 0 | 1): 'T1' | 'T2' => (team === 0 ? 'T1' : 'T2');
 
 const KITTY_SIZE = 5;
 const getSeatOrder = (): Seat[] => [...SEATS];
@@ -142,13 +148,16 @@ export const createGameState = (
   const playerOrder = orderResult.value;
   const seatOrder = getSeatOrder();
   const dealerIndex = settings?.startingPlayer ?? 0;
-  const bidding = createBiddingState(dealerIndex, settings?.minBid, settings?.step);
+  const dealerSeat = seatOrder[dealerIndex];
+  const firstBidder = (((dealerIndex + 1) % 4) as PlayerId);
+  const bidding = createBiddingState(firstBidder, settings?.minBid, settings?.step);
   const startedAt = Date.now();
   const deckMode = settings?.deckMode ?? 'full';
   const { hands, kitty, seed } = dealHands(roomCode, startedAt, deckMode);
   const hand: HandState = {
     phase: 'bidding',
     deckMode,
+    dealerSeat,
     startedAt,
     seed,
     kittySize: KITTY_SIZE,
@@ -161,8 +170,8 @@ export const createGameState = (
     bidder: null,
     winningBid: null,
     kittyPickedUp: false,
-    capturedByTeam: [[], []],
-    lastTrickTeam: null,
+    capturedByTeam: { T1: [], T2: [] },
+    lastTrickWinnerTeam: null,
     handPoints: null,
     handScores: null,
     biddersSet: null,
@@ -177,11 +186,13 @@ export const createGameState = (
       phase: 'bidding',
       seatOrder,
       playerOrder,
+      dealerSeat,
       bidding,
       hand,
       whoseTurnSeat: currentPlayerSeat,
       whoseTurnPlayerId: currentPlayerId,
       scores: [0, 0],
+      gameScore: [0, 0],
       dealerIndex,
     },
   };
@@ -463,11 +474,11 @@ export class GameStore {
     let trickLeadColor = nextLeadColor;
     let whoseTurnSeat = state.whoseTurnSeat;
     let whoseTurnPlayerId = state.whoseTurnPlayerId;
-    let capturedByTeam = [
-      state.hand.capturedByTeam[0].slice(),
-      state.hand.capturedByTeam[1].slice(),
-    ] as [Card[], Card[]];
-    let lastTrickTeam = state.hand.lastTrickTeam;
+    let capturedByTeam = {
+      T1: state.hand.capturedByTeam.T1.slice(),
+      T2: state.hand.capturedByTeam.T2.slice(),
+    };
+    let lastTrickWinnerTeam = state.hand.lastTrickWinnerTeam;
 
     if (nextTrickCards.length >= state.seatOrder.length) {
       const winnerCardIndex = determineTrickWinner(
@@ -481,11 +492,12 @@ export class GameStore {
       const winnerIndex = state.seatOrder.indexOf(winnerSeat);
       const resolvedIndex = winnerIndex === -1 ? playerIndex : winnerIndex;
       const winningTeam = teamOf(resolvedIndex);
-      capturedByTeam[winningTeam] = [
-        ...capturedByTeam[winningTeam],
+      const key = teamKey(winningTeam);
+      capturedByTeam[key] = [
+        ...capturedByTeam[key],
         ...nextTrickCards.map((entry) => entry.card),
       ];
-      lastTrickTeam = winningTeam;
+      lastTrickWinnerTeam = key;
       whoseTurnSeat = state.seatOrder[resolvedIndex];
       whoseTurnPlayerId = state.playerOrder[resolvedIndex];
       trickCards = [];
@@ -511,10 +523,11 @@ export class GameStore {
       const winningBid = state.hand.winningBid;
       const bidAmount = winningBid?.amount ?? 0;
       const biddingTeam = winningBid ? teamOf(winningBid.player) : 0;
-      const resolvedLastTrickTeam = lastTrickTeam ?? biddingTeam;
+      const resolvedLastTrickTeam =
+        lastTrickWinnerTeam === null ? teamKey(biddingTeam) : lastTrickWinnerTeam;
       const scored = scoreHand(
-        capturedByTeam,
-        resolvedLastTrickTeam,
+        [capturedByTeam.T1, capturedByTeam.T2],
+        resolvedLastTrickTeam === 'T1' ? 0 : 1,
         state.hand.kitty,
         biddingTeam,
         bidAmount,
@@ -533,6 +546,7 @@ export class GameStore {
       whoseTurnSeat,
       whoseTurnPlayerId,
       scores,
+      gameScore: scores,
       hand: {
         ...state.hand,
         phase: handPhase,
@@ -540,7 +554,7 @@ export class GameStore {
         trickCards,
         trickLeadColor,
         capturedByTeam,
-        lastTrickTeam,
+        lastTrickWinnerTeam,
         handPoints,
         handScores,
         biddersSet,
@@ -558,13 +572,16 @@ export class GameStore {
     if (state.phase !== 'score') return { ok: false, error: 'hand not complete' };
 
     const dealerIndex = (((state.dealerIndex ?? 0) + 1) % 4) as PlayerId;
-    const bidding = createBiddingState(dealerIndex, state.bidding.minBid, state.bidding.step);
+    const dealerSeat = state.seatOrder[dealerIndex];
+    const firstBidder = (((dealerIndex + 1) % 4) as PlayerId);
+    const bidding = createBiddingState(firstBidder, state.bidding.minBid, state.bidding.step);
     const startedAt = Date.now();
     const deckMode = state.hand.deckMode;
     const { hands, kitty, seed } = dealHands(roomCode, startedAt, deckMode);
     const hand: HandState = {
       phase: 'bidding',
       deckMode,
+      dealerSeat,
       startedAt,
       seed,
       kittySize: KITTY_SIZE,
@@ -577,8 +594,8 @@ export class GameStore {
       bidder: null,
       winningBid: null,
       kittyPickedUp: false,
-      capturedByTeam: [[], []],
-      lastTrickTeam: null,
+      capturedByTeam: { T1: [], T2: [] },
+      lastTrickWinnerTeam: null,
       handPoints: null,
       handScores: null,
       biddersSet: null,
@@ -588,6 +605,7 @@ export class GameStore {
     const nextState: GameState = {
       ...state,
       phase: 'bidding',
+      dealerSeat,
       bidding,
       hand,
       whoseTurnSeat: currentPlayerSeat,
