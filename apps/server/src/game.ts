@@ -21,6 +21,7 @@ export type HandState = {
   deckMode: DeckMode;
   startedAt: number;
   seed: number;
+  dealerSeat: Seat;
   kittySize: number;
   kitty: Card[];
   kittyPickedUpCards: Card[];
@@ -28,11 +29,15 @@ export type HandState = {
   hands: Card[][];
   trickCards: Array<{ seat: Seat; card: Card }>;
   trickLeadColor?: TrumpColor;
+  capturedByTeam: Record<TeamId, Card[]>;
+  lastTrickWinnerTeam: TeamId | null;
   bidder: PlayerId | null;
   winningBid: Bid | null;
   trump?: TrumpColor;
   kittyPickedUp: boolean;
 };
+
+export type TeamId = 'T1' | 'T2';
 
 export type GameState = {
   roomCode: string;
@@ -41,6 +46,7 @@ export type GameState = {
   playerOrder: string[];
   bidding: BiddingState;
   hand: HandState;
+  dealerSeat: Seat;
   whoseTurnSeat: Seat;
   whoseTurnPlayerId: string;
 };
@@ -72,6 +78,13 @@ type KittyDiscardOutcome = {
 
 const KITTY_SIZE = 5;
 const getSeatOrder = (): Seat[] => [...SEATS];
+const getTeamForSeat = (seat: Seat): TeamId => (seat.startsWith('T1') ? 'T1' : 'T2');
+
+const getNextSeatClockwise = (seatOrder: Seat[], seat: Seat): Seat => {
+  const index = seatOrder.indexOf(seat);
+  if (index === -1) return seatOrder[0];
+  return seatOrder[(index + 1) % seatOrder.length];
+};
 
 const buildPlayerOrder = (seats: Record<Seat, string | null>): GameResult<string[]> => {
   const order: string[] = [];
@@ -132,8 +145,11 @@ export const createGameState = (
 
   const playerOrder = orderResult.value;
   const seatOrder = getSeatOrder();
+  const startingPlayer = settings?.startingPlayer ?? 0;
+  const dealerIndex = (startingPlayer - 1 + seatOrder.length) % seatOrder.length;
+  const dealerSeat = seatOrder[dealerIndex];
   const bidding = createBiddingState(
-    settings?.startingPlayer ?? 0,
+    startingPlayer,
     settings?.minBid,
     settings?.step,
   );
@@ -145,6 +161,7 @@ export const createGameState = (
     deckMode,
     startedAt,
     seed,
+    dealerSeat,
     kittySize: KITTY_SIZE,
     kitty,
     kittyPickedUpCards: [],
@@ -152,6 +169,8 @@ export const createGameState = (
     hands,
     trickCards: [],
     trickLeadColor: undefined,
+    capturedByTeam: { T1: [], T2: [] },
+    lastTrickWinnerTeam: null,
     bidder: null,
     winningBid: null,
     kittyPickedUp: false,
@@ -168,6 +187,7 @@ export const createGameState = (
       playerOrder,
       bidding,
       hand,
+      dealerSeat,
       whoseTurnSeat: currentPlayerSeat,
       whoseTurnPlayerId: currentPlayerId,
     },
@@ -274,7 +294,18 @@ export class GameStore {
     const readyResult = isRoomReadyForGame(roomState);
     if (!readyResult.ok) return readyResult;
 
-    const createResult = createGameState(roomState.roomCode, roomState.seats, settings);
+    let nextSettings = settings;
+    if (settings?.startingPlayer === undefined) {
+      const existing = this.games.get(roomState.roomCode)?.state;
+      if (existing) {
+        const nextDealerSeat = getNextSeatClockwise(existing.seatOrder, existing.hand.dealerSeat);
+        const nextDealerIndex = existing.seatOrder.indexOf(nextDealerSeat);
+        const nextStartingPlayer = (nextDealerIndex + 1) % existing.seatOrder.length;
+        nextSettings = { ...settings, startingPlayer: nextStartingPlayer };
+      }
+    }
+
+    const createResult = createGameState(roomState.roomCode, roomState.seats, nextSettings);
     if (!createResult.ok) return createResult;
 
     this.games.set(roomState.roomCode, { state: createResult.value });
@@ -450,6 +481,8 @@ export class GameStore {
     let trickLeadColor = nextLeadColor;
     let whoseTurnSeat = state.whoseTurnSeat;
     let whoseTurnPlayerId = state.whoseTurnPlayerId;
+    let capturedByTeam = state.hand.capturedByTeam;
+    let lastTrickWinnerTeam = state.hand.lastTrickWinnerTeam;
 
     if (nextTrickCards.length >= state.seatOrder.length) {
       const winnerCardIndex = determineTrickWinner(
@@ -460,6 +493,14 @@ export class GameStore {
       );
       const winnerSeat =
         nextTrickCards[winnerCardIndex]?.seat ?? state.seatOrder[playerIndex];
+      const winnerTeam = getTeamForSeat(winnerSeat);
+      const nextCaptured = {
+        T1: capturedByTeam.T1.slice(),
+        T2: capturedByTeam.T2.slice(),
+      };
+      nextCaptured[winnerTeam].push(...nextTrickCards.map((entry) => entry.card));
+      capturedByTeam = nextCaptured;
+      lastTrickWinnerTeam = winnerTeam;
       const winnerIndex = state.seatOrder.indexOf(winnerSeat);
       const resolvedIndex = winnerIndex === -1 ? playerIndex : winnerIndex;
       whoseTurnSeat = state.seatOrder[resolvedIndex];
@@ -481,6 +522,8 @@ export class GameStore {
         hands,
         trickCards,
         trickLeadColor,
+        capturedByTeam,
+        lastTrickWinnerTeam,
       },
     };
 

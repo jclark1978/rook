@@ -33,6 +33,19 @@ describe('Game reducer', () => {
     expect(afterPass.whoseTurnPlayerId).toBe('player-c');
   });
 
+  it('starts bidding from the seat left of the dealer', () => {
+    const createResult = createGameState('ROOM7', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    const dealerIndex = state.seatOrder.indexOf(state.dealerSeat);
+    const leftOfDealer = state.seatOrder[(dealerIndex + 1) % state.seatOrder.length];
+
+    expect(state.hand.dealerSeat).toBe(state.dealerSeat);
+    expect(state.whoseTurnSeat).toBe(leftOfDealer);
+  });
+
   it('throws when a non-current player acts', () => {
     const createResult = createGameState('ROOM2', createSeats());
     expect(createResult.ok).toBe(true);
@@ -161,6 +174,50 @@ describe('Game reducer', () => {
 
     expect(play4.value.whoseTurnSeat).toBe(state.seatOrder[2]);
     expect(play4.value.hand.trickCards).toHaveLength(0);
+  });
+
+  it('tracks captured cards and last trick winner team', () => {
+    const createResult = createGameState('ROOM8', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    const store = new GameStore();
+    const card1 = suitCard('red', 10);
+    const card2 = suitCard('yellow', 14);
+    const card3 = suitCard('black', 2);
+    const card4 = suitCard('red', 14);
+
+    (store as { games: Map<string, { state: typeof state }> }).games.set('ROOM8', {
+      state: {
+        ...state,
+        phase: 'trick',
+        whoseTurnSeat: state.seatOrder[0],
+        whoseTurnPlayerId: state.playerOrder[0],
+        hand: {
+          ...state.hand,
+          phase: 'trick',
+          trump: 'black',
+          trickCards: [],
+          trickLeadColor: undefined,
+          hands: [[card1], [card2], [card3], [card4]],
+        },
+      },
+    });
+
+    const play1 = store.playCard('ROOM8', state.playerOrder[0], card1);
+    expect(play1.ok).toBe(true);
+    const play2 = store.playCard('ROOM8', state.playerOrder[1], card2);
+    expect(play2.ok).toBe(true);
+    const play3 = store.playCard('ROOM8', state.playerOrder[2], card3);
+    expect(play3.ok).toBe(true);
+    const play4 = store.playCard('ROOM8', state.playerOrder[3], card4);
+    expect(play4.ok).toBe(true);
+    if (!play4.ok) return;
+
+    expect(play4.value.hand.capturedByTeam.T1).toEqual([card1, card2, card3, card4]);
+    expect(play4.value.hand.capturedByTeam.T2).toEqual([]);
+    expect(play4.value.hand.lastTrickWinnerTeam).toBe('T1');
   });
 
   it('enforces follow-suit when a lead color is set', () => {

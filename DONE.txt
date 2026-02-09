@@ -9,3 +9,9 @@ Kitty visibility update:
 Kitty points notice:
 - Server: after kitty discard, detect whether any point cards are in kitty and broadcast `info:notice` "There are points in the kitty" (no details), once per hand.
 - Web: show notice banner/toast and auto-dismiss.
+
+T22: Server dealer rotation + left-of-dealer bidding start + capture tracking:
+- Added dealer seat to game/hand state, and rotate dealer clockwise when starting a new hand in the same room.
+- Bidding now starts at the seat to the dealer's left; default dealer keeps existing initial turn order.
+- Captured trick cards tracked per team with last trick winner team recorded after each completed trick.
+- Tests added for left-of-dealer bidding start and capture tracking on trick completion; all server tests passing.
