@@ -54,6 +54,10 @@ const generateRoomCode = () => {
 const rooms = new RoomStore();
 const games = new GameStore();
 
+const pendingRemovals = new Map<string, NodeJS.Timeout>();
+const removalKey = (roomCode: string, playerId: string) => `${roomCode}:${playerId}`;
+const DISCONNECT_SEAT_RELEASE_MS = 20_000;
+
 const toGamePublicState = (state: GameState) => ({
   roomCode: state.roomCode,
   phase: state.phase,
@@ -171,6 +175,15 @@ io.on('connection', (socket) => {
       const resolvedPlayerId = socket.data.playerId ?? playerId ?? socket.id;
       socket.data.playerId = resolvedPlayerId;
       const normalizedCode = roomCode.trim().toUpperCase();
+
+      // Cancel any pending seat release for this player.
+      const key = removalKey(normalizedCode, resolvedPlayerId);
+      const pending = pendingRemovals.get(key);
+      if (pending) {
+        clearTimeout(pending);
+        pendingRemovals.delete(key);
+      }
+
       const result = rooms.joinRoom(normalizedCode, resolvedPlayerId);
       if (!result.ok) {
         socket.emit('room:error', { message: result.error });
@@ -188,11 +201,31 @@ io.on('connection', (socket) => {
       });
 
       // If a game is already in progress, immediately sync the joining socket.
+      // Also: if exactly one seat is open, auto-seat them into it.
       const gameState = games.getState(normalizedCode);
       if (gameState) {
-        socket.emit('game:state', toGamePublicState(gameState));
-        socket.emit('hand:state', toHandPublicState(gameState));
-        emitPrivateHandToSocket(socket as any, gameState);
+        const openSeats = Object.entries(result.value.seats)
+          .filter(([, occupant]) => !occupant)
+          .map(([seat]) => seat);
+        if (openSeats.length === 1) {
+          const seat = openSeats[0] as string;
+          const sitResult = rooms.sit(normalizedCode, resolvedPlayerId, seat);
+          if (sitResult.ok) {
+            io.to(normalizedCode).emit('room:state', sitResult.value);
+            if (seat === 'T1P1' || seat === 'T2P1' || seat === 'T1P2' || seat === 'T2P2') {
+              const rebound = games.rebindSeat(normalizedCode, seat, resolvedPlayerId);
+              if (rebound.ok) {
+                socket.emit('game:state', toGamePublicState(rebound.value));
+                socket.emit('hand:state', toHandPublicState(rebound.value));
+                emitPrivateHandToSocket(socket as any, rebound.value);
+              }
+            }
+          }
+        } else {
+          socket.emit('game:state', toGamePublicState(gameState));
+          socket.emit('hand:state', toHandPublicState(gameState));
+          emitPrivateHandToSocket(socket as any, gameState);
+        }
       }
     },
   );
@@ -200,13 +233,34 @@ io.on('connection', (socket) => {
   socket.on('room:sit', ({ roomCode, seat }: RoomSitPayload) => {
     const resolvedPlayerId = socket.data.playerId ?? socket.id;
     socket.data.playerId = resolvedPlayerId;
-    const result = rooms.sit(roomCode, resolvedPlayerId, seat);
+    const normalizedCode = roomCode.trim().toUpperCase();
+
+    // Cancel any pending seat release for this player.
+    const key = removalKey(normalizedCode, resolvedPlayerId);
+    const pending = pendingRemovals.get(key);
+    if (pending) {
+      clearTimeout(pending);
+      pendingRemovals.delete(key);
+    }
+
+    const result = rooms.sit(normalizedCode, resolvedPlayerId, seat);
     if (!result.ok) {
       socket.emit('room:error', { message: result.error });
       return;
     }
 
-    io.to(roomCode).emit('room:state', result.value);
+    // If a game is in progress, rebind that seat to this player id.
+    const gameState = games.getState(normalizedCode);
+    if (gameState && (seat === 'T1P1' || seat === 'T2P1' || seat === 'T1P2' || seat === 'T2P2')) {
+      const rebound = games.rebindSeat(normalizedCode, seat, resolvedPlayerId);
+      if (rebound.ok) {
+        emitGameState(normalizedCode, rebound.value);
+        emitHandState(normalizedCode, rebound.value);
+        emitPrivateHandToSocket(socket as any, rebound.value);
+      }
+    }
+
+    io.to(normalizedCode).emit('room:state', result.value);
   });
 
   socket.on('room:ready', ({ roomCode, ready }: RoomReadyPayload) => {
@@ -361,6 +415,26 @@ io.on('connection', (socket) => {
     emitGameState(normalizedCode, result.value);
     emitHandState(normalizedCode, result.value);
     await emitPrivateHands(normalizedCode, result.value);
+  });
+
+  socket.on('disconnect', () => {
+    const playerId = socket.data.playerId ?? socket.id;
+    for (const room of socket.rooms) {
+      if (room === socket.id) continue;
+      const roomCode = String(room);
+      const key = removalKey(roomCode, playerId);
+      if (pendingRemovals.has(key)) continue;
+
+      const timeout = setTimeout(() => {
+        pendingRemovals.delete(key);
+        const result = rooms.removePlayer(roomCode, playerId);
+        if (result.ok) {
+          io.to(roomCode).emit('room:state', result.value);
+        }
+      }, DISCONNECT_SEAT_RELEASE_MS);
+
+      pendingRemovals.set(key, timeout);
+    }
   });
 });
 

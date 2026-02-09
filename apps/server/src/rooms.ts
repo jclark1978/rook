@@ -32,6 +32,24 @@ export type RoomResult<T> =
 export class RoomStore {
   private rooms = new Map<string, Room>();
 
+  removePlayer(roomCode: string, playerId: string): RoomResult<RoomState> {
+    const room = this.rooms.get(roomCode);
+    if (!room) {
+      return { ok: false, error: 'room missing' };
+    }
+
+    room.players.delete(playerId);
+    room.ready.delete(playerId);
+
+    for (const seatKey of SEATS) {
+      if (room.seats[seatKey] === playerId) {
+        room.seats[seatKey] = null;
+      }
+    }
+
+    return { ok: true, value: this.toState(room) };
+  }
+
   createRoom(roomCode: string, playerId: string): RoomResult<RoomState> {
     if (this.rooms.has(roomCode)) {
       return { ok: false, error: 'room exists' };

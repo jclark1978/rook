@@ -294,6 +294,29 @@ const removeCards = (hand: Card[], cards: Card[]): GameResult<Card[]> => {
 export class GameStore {
   private games = new Map<string, Game>();
 
+  rebindSeat(roomCode: string, seat: Seat, newPlayerId: string): GameResult<GameState> {
+    const game = this.games.get(roomCode);
+    if (!game) return { ok: false, error: 'game missing' };
+
+    const { state } = game;
+    const index = state.seatOrder.indexOf(seat);
+    if (index === -1) return { ok: false, error: 'invalid seat' };
+
+    const playerOrder = state.playerOrder.slice();
+    playerOrder[index] = newPlayerId;
+
+    const whoseTurnPlayerId = state.whoseTurnSeat === seat ? newPlayerId : state.whoseTurnPlayerId;
+
+    const nextState: GameState = {
+      ...state,
+      playerOrder,
+      whoseTurnPlayerId,
+    };
+
+    game.state = nextState;
+    return { ok: true, value: nextState };
+  }
+
   startGame(roomState: RoomState, settings?: GameStartSettings): GameResult<GameState> {
     const readyResult = isRoomReadyForGame(roomState);
     if (!readyResult.ok) return readyResult;
