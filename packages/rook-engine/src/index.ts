@@ -15,6 +15,25 @@ export const DEFAULT_SETTINGS: GameSettings = {
 
 export * from './cards.js';
 export * from './deck.js';
-export * from './bidding.js';
+export {
+  applyBiddingAction,
+  createBiddingState,
+  DEFAULT_BID_STEP,
+  DEFAULT_MIN_BID,
+  getWinningBid,
+  isBiddingComplete,
+  partnerOf,
+  teamOf,
+} from './bidding.js';
+export type {
+  Bid,
+  BidAction,
+  BiddingAction,
+  BiddingState,
+  PassAction,
+  PassPartnerAction,
+  PlayerId,
+} from './bidding.js';
 export * from './trick.js';
 export * from './scoring.js';
+export * from './state.js';
