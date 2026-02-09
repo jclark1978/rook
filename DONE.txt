@@ -1,13 +1,7 @@
-Engine:
-- Added trickRound helper module (applyPlay/isTrickComplete/trickWinner), exported from rook-engine, with tests for trump and rook high/low.
+Trick play:
+- Web: trick pile + turn display + click-to-play enabled only on your turn.
+- T19: fixed click-to-play wiring, added client/server play attempt logging, added reducer-style test ensuring played cards are removed from the correct hand.
 
-Server:
-- Updated trick play to use engine legality + winner logic, track trick lead color, reset after each trick.
-- Added tests for trump-wins resolution and follow-suit enforcement.
-
-Web:
-- Added trick-play UI: shows trick pile + whose turn, click-to-play enabled only on your turn, simple completion log line.
-
-T19:
-- Fixed click-to-play rendering for trick phase cards, added client/server play attempt logging, and added a reducer-style test ensuring played cards are removed from the correct hand.
-- Verified play:card payload matches server expectations and game:error is surfaced via existing error banners in the hand view.
+Kitty visibility update:
+- Server: stop sending kitty cards in private payloads after discard; only send picked-up kitty during kitty phase.
+- Web: hide kitty panel for bidder once phase advances past kitty.

@@ -1052,7 +1052,7 @@ function App() {
               </div>
             </div>
 
-            {isBidder || kittyCards.length > 0 ? (
+            {(isBidder && activePhase === 'kitty') || kittyCards.length > 0 ? (
               <div className="bidding-card kitty-card">
                 <p className="eyebrow">Kitty</p>
                 {activePhase === 'kitty' ? (
