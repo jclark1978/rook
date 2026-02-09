@@ -100,10 +100,9 @@ const emitPrivateHands = async (roomCode: string, state: GameState) => {
     if (
       state.hand.kittyPickedUp &&
       state.hand.bidder === playerIndex &&
-      (state.phase === 'kitty' || state.phase === 'declareTrump')
+      state.phase === 'kitty'
     ) {
-      payload.kitty =
-        state.phase === 'kitty' ? state.hand.kittyPickedUpCards : state.hand.kitty;
+      payload.kitty = state.hand.kittyPickedUpCards;
     }
     roomSocket.emit('hand:private', payload);
   }
