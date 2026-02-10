@@ -663,19 +663,19 @@ button.not-ready {
   flex-direction: column;
   align-items: stretch;
   justify-content: space-between;
-  gap: 0.25rem;
-  padding: 0.45rem 0.5rem;
-  border-radius: 0.9rem;
+  gap: 0.2rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 0.85rem;
   border: 2px solid var(--border-strong);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.55));
   box-shadow:
-    0 8px 18px rgba(25, 20, 15, 0.18),
+    0 6px 14px rgba(25, 20, 15, 0.16),
     0 2px 0 rgba(255, 255, 255, 0.35) inset;
   font-weight: 800;
   letter-spacing: 0.02em;
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   aspect-ratio: 2.5 / 3.5;
-  min-height: 120px;
+  min-height: 84px;
   overflow: hidden;
 }
 
@@ -693,13 +693,13 @@ button.not-ready {
 }
 
 .card-rank {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 900;
   color: var(--ink);
 }
 
 .card-suit {
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: 900;
   color: var(--ink-soft);
 }
@@ -712,19 +712,19 @@ button.not-ready {
 }
 
 .card-suit-big {
-  font-size: 2.3rem;
+  font-size: 1.8rem;
   font-weight: 900;
   opacity: 0.28;
   color: var(--ink);
 }
 
 .card-pill img.card-rook {
-  width: 70%;
+  width: 60%;
   height: auto;
-  border-radius: 0.5rem;
+  border-radius: 0.45rem;
   border: 1px solid var(--border-strong);
   object-fit: cover;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.16);
 }
 
 .card-pill.card-select {
