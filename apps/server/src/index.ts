@@ -30,7 +30,12 @@ type RoomAck =
   | { ok: false; message: string };
 type GameStartPayload = {
   roomCode: string;
-  settings?: { minBid?: number; step?: number; deckMode?: DeckMode };
+  settings?: {
+    minBid?: number;
+    step?: number;
+    deckMode?: DeckMode;
+    rookRankMode?: 'rookHigh' | 'rookLow';
+  };
 };
 type GameBidPayload = { roomCode: string; amount: number };
 type GamePassPayload = { roomCode: string };
@@ -68,6 +73,7 @@ const toGamePublicState = (state: GameState) => ({
   whoseTurnSeat: state.whoseTurnSeat,
   whoseTurnPlayerId: state.whoseTurnPlayerId,
   dealerSeat: state.seatOrder[state.dealerIndex] ?? null,
+  rookRankMode: state.rookRankMode,
   gameScores: state.scores,
 });
 
@@ -75,6 +81,7 @@ const toHandPublicState = (state: GameState) => ({
   roomCode: state.roomCode,
   phase: state.phase,
   trump: state.hand.trump,
+  rookRankMode: state.rookRankMode,
   bidding: state.bidding,
   winningBid: state.hand.winningBid,
   bidderSeat: state.hand.bidder === null ? null : state.seatOrder[state.hand.bidder],

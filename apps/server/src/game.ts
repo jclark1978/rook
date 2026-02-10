@@ -10,7 +10,7 @@ import {
 } from '@rook/engine/src/bidding.js';
 import type { Card } from '@rook/engine/src/cards.js';
 import { cardId, isPointCard } from '@rook/engine/src/cards.js';
-import type { DeckMode } from '@rook/engine/src/index.js';
+import type { DeckMode, RookRankMode } from '@rook/engine/src/index.js';
 import { buildDeck, deal, mulberry32, shuffle } from '@rook/engine/src/deck.js';
 import { scoreHand } from '@rook/engine/src/scoring.js';
 import { determineTrickWinner, getLegalPlays, type TrumpColor } from '@rook/engine/src/trick.js';
@@ -48,6 +48,7 @@ export type GameState = {
   seatOrder: Seat[];
   playerOrder: string[];
   dealerSeat: Seat;
+  rookRankMode: RookRankMode;
   bidding: BiddingState;
   hand: HandState;
   whoseTurnSeat: Seat;
@@ -63,6 +64,7 @@ export type GameStartSettings = {
   step?: number;
   startingPlayer?: PlayerId;
   deckMode?: DeckMode;
+  rookRankMode?: RookRankMode;
 };
 
 export type GameAction =
@@ -153,6 +155,7 @@ export const createGameState = (
   const bidding = createBiddingState(firstBidder, settings?.minBid, settings?.step);
   const startedAt = Date.now();
   const deckMode = settings?.deckMode ?? 'full';
+  const rookRankMode = settings?.rookRankMode ?? 'rookHigh';
   const { hands, kitty, seed } = dealHands(roomCode, startedAt, deckMode);
   const hand: HandState = {
     phase: 'bidding',
@@ -187,6 +190,7 @@ export const createGameState = (
       seatOrder,
       playerOrder,
       dealerSeat,
+      rookRankMode,
       bidding,
       hand,
       whoseTurnSeat: currentPlayerSeat,
@@ -474,7 +478,12 @@ export class GameStore {
     if (!trump) {
       return { ok: false, error: 'trump not set' };
     }
-    const legalPlays = getLegalPlays(currentHand, state.hand.trickLeadColor, trump, 'rookHigh');
+    const legalPlays = getLegalPlays(
+      currentHand,
+      state.hand.trickLeadColor,
+      trump,
+      state.rookRankMode,
+    );
     if (!legalPlays.includes(cardId(card))) {
       return { ok: false, error: 'illegal play' };
     }
@@ -509,7 +518,7 @@ export class GameStore {
         nextTrickCards.map((entry) => entry.card),
         nextLeadColor,
         trump,
-        'rookHigh',
+        state.rookRankMode,
       );
       const winnerSeat =
         nextTrickCards[winnerCardIndex]?.seat ?? state.seatOrder[playerIndex];
@@ -635,6 +644,8 @@ export class GameStore {
       whoseTurnSeat: currentPlayerSeat,
       whoseTurnPlayerId: currentPlayerId,
       dealerIndex,
+      // keep rookRankMode across hands
+      rookRankMode: state.rookRankMode,
     };
 
     game.state = nextState;

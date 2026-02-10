@@ -55,6 +55,8 @@ type BiddingState = {
   passPartnerUsed?: [boolean, boolean]
 }
 
+type RookRankMode = 'rookHigh' | 'rookLow'
+
 type GameState = {
   roomCode?: string
   phase?: string
@@ -67,6 +69,7 @@ type GameState = {
   passPartnerAllowed?: boolean
   passPartnerUsed?: [boolean, boolean]
   dealerSeat?: SeatId | null
+  rookRankMode?: RookRankMode
   gameScores?: [number, number]
 }
 
@@ -77,6 +80,7 @@ type HandPublicState = {
   bidderSeat?: SeatId | null
   dealerSeat?: SeatId | null
   trump?: string | null
+  rookRankMode?: RookRankMode
   kittyCount?: number
   whoseTurnSeat?: SeatId | null
   trickCards?: unknown[]
@@ -234,6 +238,7 @@ function App() {
   const [customBid, setCustomBid] = useState('')
   const [selectedDiscards, setSelectedDiscards] = useState<string[]>([])
   const [selectedTrump, setSelectedTrump] = useState<TrumpColor>('red')
+  const [startRookRankMode, setStartRookRankMode] = useState<RookRankMode>('rookHigh')
   const [infoNotice, setInfoNotice] = useState<{
     id: number
     text: string
@@ -455,7 +460,7 @@ function App() {
       return
     }
     setErrorMessage('')
-    socket.emit('game:start', { roomCode })
+    socket.emit('game:start', { roomCode, settings: { rookRankMode: startRookRankMode } })
   }
 
   const biddingState: BiddingState | null = useMemo(() => {
@@ -619,6 +624,9 @@ function App() {
   }, [handState])
 
   const trumpColorForHand = currentTrump ?? undefined
+
+  const rookRankMode: RookRankMode =
+    handState?.rookRankMode ?? gameState?.rookRankMode ?? 'rookHigh'
 
   const kittyCount = handState?.kittyCount ?? kittyCards.length
 
@@ -1022,6 +1030,26 @@ function App() {
               <p className="muted">Share this code to bring players in.</p>
             </div>
             <div className="lobby-actions">
+              <div className="lobby-setting">
+                <p className="meta-label">Rook</p>
+                <div className="lobby-setting-buttons">
+                  <button
+                    type="button"
+                    className={startRookRankMode === 'rookHigh' ? 'primary' : 'ghost'}
+                    onClick={() => setStartRookRankMode('rookHigh')}
+                  >
+                    High
+                  </button>
+                  <button
+                    type="button"
+                    className={startRookRankMode === 'rookLow' ? 'primary' : 'ghost'}
+                    onClick={() => setStartRookRankMode('rookLow')}
+                  >
+                    Low
+                  </button>
+                </div>
+              </div>
+
               {mySeat && roomState?.ready?.[playerId] ? (
                 <button className="primary" onClick={handleStartGame}>
                   Start Game
@@ -1172,11 +1200,7 @@ function App() {
             <div className="bidding-card hand-card">
               <p className="eyebrow">Your Hand</p>
               {handCards.length ? (
-                (() => {
-                  // TODO: wire rookHigh/rookLow from server settings; default rookHigh for now.
-                  const rookRankMode: 'rookHigh' | 'rookLow' = 'rookHigh'
-                  return renderHandBySuit(handCards, undefined, trumpColorForHand, rookRankMode)
-                })()
+                renderHandBySuit(handCards, undefined, trumpColorForHand, rookRankMode)
               ) : (
                 <p className="empty-state">Waiting for deal...</p>
               )}
@@ -1403,9 +1427,6 @@ function App() {
                     activePhase === 'trick' &&
                     mySeat?.id &&
                     handState?.whoseTurnSeat === mySeat.id
-
-                  // TODO: wire rookHigh/rookLow from server settings; default rookHigh for now.
-                  const rookRankMode: 'rookHigh' | 'rookLow' = 'rookHigh'
 
                   return renderHandBySuit(
                     handCards,

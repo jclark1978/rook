@@ -270,6 +270,20 @@ button.ghost {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.lobby-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-end;
+}
+
+.lobby-setting-buttons {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
 .eyebrow {
