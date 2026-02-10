@@ -619,8 +619,14 @@ button.not-ready {
 
 .hand-rook-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(84px, 110px));
   gap: 0.6rem;
+  justify-content: start;
+}
+
+.hand-rook-cards .card-pill {
+  max-width: 110px;
+  width: 110px;
 }
 
 .hand-columns {

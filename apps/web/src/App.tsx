@@ -1238,6 +1238,31 @@ function App() {
                     Pass-Partner
                   </button>
                 </div>
+
+                <div className="bidding-history-inline">
+                  <p className="meta-label">Bid History</p>
+                  <ul className="history-list">
+                    {(biddingState?.history?.length ?? 0) > 0 ? (
+                      biddingState?.history?.map((entry, index) => {
+                        const seatLabel = seatOrder[entry.player] ?? 'Unknown seat'
+                        const actionLabel =
+                          entry.type === 'bid'
+                            ? `Bid ${entry.amount}`
+                            : entry.type === 'pass'
+                              ? 'Pass'
+                              : 'Pass-Partner'
+                        return (
+                          <li key={`${entry.type}-${index}`}>
+                            <span>{seatLabel}</span>
+                            <span>{actionLabel}</span>
+                          </li>
+                        )
+                      })
+                    ) : (
+                      <li className="history-empty">No bids yet.</li>
+                    )}
+                  </ul>
+                </div>
               </div>
             </div>
 
@@ -1250,30 +1275,7 @@ function App() {
               )}
             </div>
 
-            <div className="bidding-card bidding-history">
-              <p className="eyebrow">Bid History</p>
-              <ul className="history-list">
-                {(biddingState?.history?.length ?? 0) > 0 ? (
-                  biddingState?.history?.map((entry, index) => {
-                    const seatLabel = seatOrder[entry.player] ?? 'Unknown seat'
-                    const actionLabel =
-                      entry.type === 'bid'
-                        ? `Bid ${entry.amount}`
-                        : entry.type === 'pass'
-                          ? 'Pass'
-                          : 'Pass-Partner'
-                    return (
-                      <li key={`${entry.type}-${index}`}>
-                        <span>{seatLabel}</span>
-                        <span>{actionLabel}</span>
-                      </li>
-                    )
-                  })
-                ) : (
-                  <li className="history-empty">No bids yet.</li>
-                )}
-              </ul>
-            </div>
+            {/* Bid History moved into Your Action */}
 
           </section>
         </main>
