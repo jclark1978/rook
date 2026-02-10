@@ -563,6 +563,20 @@ button.not-ready {
   .postbid-grid .hand-card {
     order: -1;
   }
+
+  /* During trick play: 1/3 hand, 2/3 table */
+  .postbid-grid.is-trick {
+    grid-template-columns: 1fr 2fr;
+    align-items: start;
+  }
+
+  .postbid-grid.is-trick .hand-card {
+    grid-column: 1;
+  }
+
+  .postbid-grid.is-trick .trick-card {
+    grid-column: 2;
+  }
 }
 
 .summary-card {

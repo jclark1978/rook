@@ -1333,7 +1333,7 @@ function App() {
           </section>
           {renderSeatStrip()}
 
-          <section className="postbid-grid">
+          <section className={`postbid-grid${activePhase === 'trick' ? ' is-trick' : ''}`}>
             {activePhase === 'score' ? (
               <div className="bidding-card summary-card">
                 <p className="eyebrow">Hand Summary</p>
