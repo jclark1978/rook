@@ -1269,7 +1269,16 @@ function App() {
             </div>
 
             <div className="bidding-card hand-card">
-              <p className="eyebrow">Your Hand</p>
+              <div className="hand-header">
+                <p className="eyebrow">Your Hand</p>
+                {activePhase === 'trick' &&
+                mySeat?.id &&
+                handState?.undoAvailableForSeat === mySeat.id ? (
+                  <button type="button" className="ghost hand-undo" onClick={emitUndoPlay}>
+                    Undo Last Play
+                  </button>
+                ) : null}
+              </div>
               {handCards.length ? (
                 renderHandBySuit(handCards, undefined, trumpColorForHand, rookRankMode)
               ) : (
@@ -1431,17 +1440,7 @@ function App() {
             ) : null}
 
             {activePhase !== 'score' ? (
-              activePhase === 'trick' &&
-              mySeat?.id &&
-              handState?.undoAvailableForSeat === mySeat.id ? (
-                <div className="bidding-card action-card">
-                  <p className="eyebrow">Misclick Takeback</p>
-                  <p className="muted">You can undo your last play until the next player acts.</p>
-                  <button className="ghost" onClick={emitUndoPlay}>
-                    Undo Last Play
-                  </button>
-                </div>
-              ) : activePhase === 'kitty' && isBidder ? (
+              activePhase === 'kitty' && isBidder ? (
                 <div className="bidding-card action-card">
                   <p className="eyebrow">Kitty</p>
                   <p className="muted">The kitty has been added to your hand. Discard five cards back to the kitty.</p>
@@ -1482,7 +1481,16 @@ function App() {
             ) : null}
 
             <div className="bidding-card hand-card">
-              <p className="eyebrow">Your Hand</p>
+              <div className="hand-header">
+                <p className="eyebrow">Your Hand</p>
+                {activePhase === 'trick' &&
+                mySeat?.id &&
+                handState?.undoAvailableForSeat === mySeat.id ? (
+                  <button type="button" className="ghost hand-undo" onClick={emitUndoPlay}>
+                    Undo Last Play
+                  </button>
+                ) : null}
+              </div>
               {handCards.length ? (
                 (() => {
                   const isTrickTurn =
