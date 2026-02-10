@@ -7,6 +7,9 @@ export type RoomState = {
   seats: Record<Seat, string | null>;
   players: string[];
   ready: Record<string, boolean>;
+  playerNames: Record<string, string>;
+  ownerId: string;
+  targetScore: number;
 };
 
 type Room = {
@@ -14,6 +17,9 @@ type Room = {
   seats: Record<Seat, string | null>;
   players: Set<string>;
   ready: Map<string, boolean>;
+  playerNames: Map<string, string>;
+  ownerId: string;
+  targetScore: number;
 };
 
 const createEmptySeats = (): Record<Seat, string | null> => ({
@@ -40,6 +46,7 @@ export class RoomStore {
 
     room.players.delete(playerId);
     room.ready.delete(playerId);
+    room.playerNames.delete(playerId);
 
     for (const seatKey of SEATS) {
       if (room.seats[seatKey] === playerId) {
@@ -50,23 +57,32 @@ export class RoomStore {
     return { ok: true, value: this.toState(room) };
   }
 
-  createRoom(roomCode: string, playerId: string): RoomResult<RoomState> {
+  createRoom(
+    roomCode: string,
+    playerId: string,
+    playerName?: string,
+    targetScore?: number,
+  ): RoomResult<RoomState> {
     if (this.rooms.has(roomCode)) {
       return { ok: false, error: 'room exists' };
     }
 
+    const normalizedTarget = this.normalizeTargetScore(targetScore);
     const room: Room = {
       roomCode,
       seats: createEmptySeats(),
       players: new Set([playerId]),
       ready: new Map([[playerId, false]]),
+      playerNames: new Map([[playerId, this.normalizePlayerName(playerName)]]),
+      ownerId: playerId,
+      targetScore: normalizedTarget,
     };
 
     this.rooms.set(roomCode, room);
     return { ok: true, value: this.toState(room) };
   }
 
-  joinRoom(roomCode: string, playerId: string): RoomResult<RoomState> {
+  joinRoom(roomCode: string, playerId: string, playerName?: string): RoomResult<RoomState> {
     const room = this.rooms.get(roomCode);
     if (!room) {
       return { ok: false, error: 'room missing' };
@@ -76,6 +92,7 @@ export class RoomStore {
     if (!room.ready.has(playerId)) {
       room.ready.set(playerId, false);
     }
+    room.playerNames.set(playerId, this.normalizePlayerName(playerName));
 
     return { ok: true, value: this.toState(room) };
   }
@@ -102,6 +119,24 @@ export class RoomStore {
     }
 
     room.seats[seat] = playerId;
+    // Seat selection implies readiness in the current lobby flow.
+    room.ready.set(playerId, true);
+
+    return { ok: true, value: this.toState(room) };
+  }
+
+  leaveSeat(roomCode: string, playerId: string): RoomResult<RoomState> {
+    const room = this.rooms.get(roomCode);
+    if (!room) {
+      return { ok: false, error: 'room missing' };
+    }
+
+    for (const seatKey of SEATS) {
+      if (room.seats[seatKey] === playerId) {
+        room.seats[seatKey] = null;
+      }
+    }
+    room.ready.set(playerId, false);
 
     return { ok: true, value: this.toState(room) };
   }
@@ -132,6 +167,23 @@ export class RoomStore {
       seats: { ...room.seats },
       players: Array.from(room.players),
       ready: Object.fromEntries(room.ready.entries()),
+      playerNames: Object.fromEntries(room.playerNames.entries()),
+      ownerId: room.ownerId,
+      targetScore: room.targetScore,
     };
+  }
+
+  private normalizePlayerName(playerName?: string): string {
+    const normalized = playerName?.trim();
+    if (!normalized) return 'Guest';
+    return normalized.slice(0, 24);
+  }
+
+  private normalizeTargetScore(targetScore?: number): number {
+    if (!Number.isFinite(targetScore)) return 700;
+    const rounded = Math.round(targetScore as number);
+    if (rounded < 100) return 100;
+    if (rounded > 2000) return 2000;
+    return rounded;
   }
 }

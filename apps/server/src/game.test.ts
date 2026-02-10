@@ -16,7 +16,50 @@ const suitCard = (color: 'red' | 'yellow' | 'green' | 'black', rank: number) => 
   rank,
 });
 
+const createRoomState = () => ({
+  roomCode: 'ROOMX',
+  seats: createSeats(),
+  players: Object.values(createSeats()),
+  ready: {
+    'player-a': true,
+    'player-b': true,
+    'player-c': true,
+    'player-d': true,
+  },
+  playerNames: {
+    'player-a': 'A',
+    'player-b': 'B',
+    'player-c': 'C',
+    'player-d': 'D',
+  },
+  ownerId: 'player-a',
+  targetScore: 700,
+});
+
 describe('Game reducer', () => {
+  it('starts game in preDeal and only dealer can deal', () => {
+    const store = new GameStore();
+    const started = store.startGame(createRoomState());
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(started.value.phase).toBe('preDeal');
+    expect(started.value.whoseTurnPlayerId).toBe('player-a');
+
+    const nonDealerDeal = store.dealHand('ROOMX', 'player-b', 'rookLow');
+    expect(nonDealerDeal.ok).toBe(false);
+    if (!nonDealerDeal.ok) {
+      expect(nonDealerDeal.error).toBe('only dealer may deal');
+    }
+
+    const dealerDeal = store.dealHand('ROOMX', 'player-a', 'rookLow');
+    expect(dealerDeal.ok).toBe(true);
+    if (!dealerDeal.ok) return;
+    expect(dealerDeal.value.phase).toBe('bidding');
+    expect(dealerDeal.value.rookRankMode).toBe('rookLow');
+    expect(dealerDeal.value.hand.hands[0].length).toBeGreaterThan(0);
+    expect(dealerDeal.value.hand.kitty.length).toBe(5);
+  });
+
   it('advances turn after bid and pass', () => {
     const createResult = createGameState('ROOM1', createSeats());
     expect(createResult.ok).toBe(true);
@@ -57,6 +100,26 @@ describe('Game reducer', () => {
     expect(() => reduceGameState(state, 'player-c', { type: 'bid', amount: 100 })).toThrow(
       'current player',
     );
+  });
+
+  it('awards dealer an automatic 100 bid when everyone passes', () => {
+    const createResult = createGameState('ROOM12', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    // Dealer is player 0 by default; bidding starts with player 1.
+    const afterPass1 = reduceGameState(state, state.playerOrder[1], { type: 'pass' });
+    const afterPass2 = reduceGameState(afterPass1, state.playerOrder[2], { type: 'pass' });
+    const afterPass3 = reduceGameState(afterPass2, state.playerOrder[3], { type: 'pass' });
+
+    expect(afterPass3.phase).toBe('kitty');
+    expect(afterPass3.hand.winningBid).toEqual({ player: 0, amount: 100 });
+    expect(afterPass3.hand.bidder).toBe(0);
+    expect(afterPass3.bidding.highBid).toEqual({ player: 0, amount: 100 });
+    expect(afterPass3.whoseTurnSeat).toBe(afterPass3.seatOrder[0]);
+    expect(afterPass3.hand.kittyPickedUp).toBe(true);
+    expect(afterPass3.hand.kittyPickedUpCards.length).toBe(5);
   });
 
   it('removes a card from the hand when played', () => {
@@ -175,7 +238,7 @@ describe('Game reducer', () => {
     if (!play4.ok) return;
 
     expect(play4.value.whoseTurnSeat).toBe(state.seatOrder[2]);
-    expect(play4.value.hand.trickCards).toHaveLength(0);
+    expect(play4.value.hand.trickCards).toHaveLength(4);
   });
 
   it('tracks captured cards and last trick winner team', () => {
@@ -447,5 +510,57 @@ describe('Game reducer', () => {
       // After trick completion, undo is no longer offered.
       expect(undo.error).toBe('no undo available');
     }
+  });
+
+  it('keeps completed trick visible until winner leads next trick', () => {
+    const createResult = createGameState('ROOM11', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    const store = new GameStore();
+    const cardA = suitCard('red', 5);
+    const cardB = suitCard('yellow', 9);
+    const cardC = suitCard('black', 10);
+    const cardD = suitCard('green', 1);
+    const nextLead = suitCard('red', 8);
+
+    (store as { games: Map<string, { state: typeof state }> }).games.set('ROOM11', {
+      state: {
+        ...state,
+        phase: 'trick',
+        whoseTurnSeat: state.seatOrder[0],
+        whoseTurnPlayerId: state.playerOrder[0],
+        hand: {
+          ...state.hand,
+          phase: 'trick',
+          trump: 'red',
+          trickCards: [],
+          trickLeadColor: undefined,
+          hands: [
+            [cardA, nextLead],
+            [cardB],
+            [cardC],
+            [cardD],
+          ],
+        },
+      },
+    });
+
+    store.playCard('ROOM11', state.playerOrder[0], cardA);
+    store.playCard('ROOM11', state.playerOrder[1], cardB);
+    store.playCard('ROOM11', state.playerOrder[2], cardC);
+    const trickComplete = store.playCard('ROOM11', state.playerOrder[3], cardD);
+    expect(trickComplete.ok).toBe(true);
+    if (!trickComplete.ok) return;
+
+    expect(trickComplete.value.hand.trickCards).toHaveLength(4);
+
+    // Winner is player 0 via trump; their next play should clear old trick and start a new one.
+    const next = store.playCard('ROOM11', state.playerOrder[0], nextLead);
+    expect(next.ok).toBe(true);
+    if (!next.ok) return;
+    expect(next.value.hand.trickCards).toHaveLength(1);
+    expect(next.value.hand.trickCards[0]?.seat).toBe(state.seatOrder[0]);
   });
 });
