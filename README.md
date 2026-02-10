@@ -1,45 +1,76 @@
-# Rook (Online)
+# The Rook Room
 
-A private, browser-based multiplayer implementation of the classic card game **Rook**, with support for Jeff’s house rules.
+Private, browser-based multiplayer **Rook** for friends and family.
 
-This repo is a work-in-progress. Current focus is building a deterministic rules engine + real-time room/game server + responsive web UI.
+This monorepo contains a realtime server, a deterministic rules engine, and a React client.
 
-## What’s working (so far)
-- Private rooms (create/join by code)
-- Seat selection (T1P1, T2P1, T1P2, T2P2) + ready toggles
-- Bidding phase (min 100, step 5) with Pass + Pass-Partner
-- Kitty flow (pickup + discard 5) and trump declaration
-- Trick play (follow-suit enforcement + trick winner)
-- Basic scoring utilities (engine)
+## Current capabilities
+- Create or join private rooms with a 4-character game ID
+- Player handle capture and persistence (`localStorage`)
+- Team seating with live player names
+- Room creator sets **Game Winning Score** (fixed for that room)
+- Pre-deal flow: dealer chooses `Rook High` or `Rook Low`, then deals
+- Bidding with `Bid`, `Pass`, and `Pass Partner`
+- All-pass fallback: dealer is auto-awarded bid at `100`
+- Kitty pickup/discard and trump declaration
+- Trick play with follow-suit validation
+- Hand scoring and running game score
+- Game ends when a team reaches target score
 
 ## Tech stack
-- **Web:** React + Vite + TypeScript
-- **Server:** Node.js + Express + Socket.IO + TypeScript
-- **Rules engine:** TypeScript (deterministic, unit-tested)
+- Web: React + Vite + TypeScript + Socket.IO client
+- Server: Node.js + Express + Socket.IO + TypeScript
+- Engine: TypeScript rules/deck/scoring utilities
 
-## Repo layout
-- `apps/web` — web client UI
-- `apps/server` — realtime room/game server
-- `packages/rook-engine` — rules engine + tests
-- `docs/` — rules spec and working notes
+## Repository layout
+- `apps/web` - client UI
+- `apps/server` - realtime API/socket server
+- `packages/rook-engine` - shared game engine logic
+- `docs/` - rules notes/spec
 
 ## Local development
-From the repo root:
+From repo root:
 
 ```bash
 npm install
 
-# run both (separate terminals)
+# option 1: run both from root
+npm run dev
+
+# option 2: run separately
 npm run -w @rook/server dev
 npm run -w @rook/web dev -- --host 0.0.0.0 --port 5173
 ```
 
-Then open:
-- Web: http://localhost:5173
-- Server health: http://localhost:3001/health
+Open:
+- Web: `http://localhost:5173`
+- Server health: `http://localhost:3001/health`
 
-## Rules preset
-See: `docs/RULES.md`
+The web client connects to `http(s)://<current-host>:3001`.
+
+## Build, test, lint
+From repo root:
+
+```bash
+npm run build
+npm run test
+npm run lint
+npm run typecheck
+```
+
+## Server environment
+- `PORT` (default: `3001`)
+- `CORS_ORIGIN` (optional; defaults include local dev hosts)
+
+## Game flow (current)
+1. Create/join room and take seats
+2. Dealer chooses rook mode and clicks Deal
+3. Bidding
+4. Bid winner picks up kitty, discards 5
+5. Bid winner declares trump
+6. Trick play
+7. Hand summary and score update
+8. Next hand (dealer rotates) until a team reaches target score
 
 ## Notes
-This project is currently built for internal iteration; expect breaking changes.
+This project is under active iteration. UI and game rules enforcement may continue to evolve.
