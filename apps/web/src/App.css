@@ -558,6 +558,13 @@ button.not-ready {
   gap: 1.5rem;
 }
 
+/* Prefer Your Hand on the left on wider layouts by ordering it first. */
+@media (min-width: 900px) {
+  .postbid-grid .hand-card {
+    order: -1;
+  }
+}
+
 .summary-card {
   grid-column: 1 / -1;
 }
