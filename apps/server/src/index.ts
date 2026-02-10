@@ -355,7 +355,7 @@ io.on('connection', (socket) => {
     await emitPrivateHands(normalizedCode, result.value);
   });
 
-  socket.on('game:bid', ({ roomCode, amount }: GameBidPayload) => {
+  socket.on('game:bid', async ({ roomCode, amount }: GameBidPayload) => {
     const resolvedPlayerId = socket.data.playerId ?? socket.id;
     socket.data.playerId = resolvedPlayerId;
     const normalizedCode = roomCode.trim().toUpperCase();
@@ -367,9 +367,10 @@ io.on('connection', (socket) => {
 
     emitGameState(normalizedCode, result.value);
     emitHandState(normalizedCode, result.value);
+    await emitPrivateHands(normalizedCode, result.value);
   });
 
-  socket.on('game:pass', ({ roomCode }: GamePassPayload) => {
+  socket.on('game:pass', async ({ roomCode }: GamePassPayload) => {
     const resolvedPlayerId = socket.data.playerId ?? socket.id;
     socket.data.playerId = resolvedPlayerId;
     const normalizedCode = roomCode.trim().toUpperCase();
@@ -381,9 +382,10 @@ io.on('connection', (socket) => {
 
     emitGameState(normalizedCode, result.value);
     emitHandState(normalizedCode, result.value);
+    await emitPrivateHands(normalizedCode, result.value);
   });
 
-  socket.on('game:passPartner', ({ roomCode }: GamePassPartnerPayload) => {
+  socket.on('game:passPartner', async ({ roomCode }: GamePassPartnerPayload) => {
     const resolvedPlayerId = socket.data.playerId ?? socket.id;
     socket.data.playerId = resolvedPlayerId;
     const normalizedCode = roomCode.trim().toUpperCase();
@@ -395,6 +397,7 @@ io.on('connection', (socket) => {
 
     emitGameState(normalizedCode, result.value);
     emitHandState(normalizedCode, result.value);
+    await emitPrivateHands(normalizedCode, result.value);
   });
 
   socket.on('kitty:pickup', async ({ roomCode }: KittyPickupPayload) => {
