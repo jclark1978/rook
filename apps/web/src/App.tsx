@@ -188,6 +188,7 @@ type RenderCardOptions = {
   selectable?: boolean
   clickable?: boolean
   onClick?: (card: Card) => void
+  highlightKeys?: Set<string>
 }
 
 type HandColumns = {
@@ -545,6 +546,12 @@ function App() {
     [handPrivate],
   )
 
+  const kittyCardKeys = useMemo(() => {
+    const set = new Set<string>()
+    for (const card of kittyCards) set.add(cardKey(card))
+    return set
+  }, [kittyCards])
+
   const trickPlays = useMemo(() => {
     const raw = handState?.trickCards
     if (!Array.isArray(raw)) return [] as Array<{ seat: SeatId; card: Card }>
@@ -695,16 +702,7 @@ function App() {
     socket.emit('game:passPartner', { roomCode })
   }
 
-  const emitPickupKitty = () => {
-    if (!roomCode) return
-    const socket = socketRef.current
-    if (!socket) {
-      setErrorMessage('Unable to connect to the lobby server.')
-      return
-    }
-    setErrorMessage('')
-    socket.emit('kitty:pickup', { roomCode })
-  }
+  // Kitty is auto-added to the bidder hand when bidding completes.
 
   const emitDiscardKitty = () => {
     if (!roomCode) return
@@ -785,15 +783,17 @@ function App() {
     selectable: boolean,
     clickable = false,
     onClick?: (card: Card) => void,
+    highlight?: boolean,
   ) => {
     const key = cardKey(card)
     const selected = selectedDiscards.includes(key)
     const baseClass = `card-pill card-${card.kind === 'rook' ? 'rook' : card.color}`
+    const highlightClass = highlight ? ' card-kitty' : ''
     const className = selectable
-      ? `${baseClass} card-select${selected ? ' selected' : ''}`
+      ? `${baseClass} card-select${selected ? ' selected' : ''}${highlightClass}`
       : clickable
-        ? `${baseClass} card-click`
-        : baseClass
+        ? `${baseClass} card-click${highlightClass}`
+        : `${baseClass}${highlightClass}`
     const content =
       card.kind === 'rook' ? (
         <>
@@ -873,6 +873,7 @@ function App() {
                   options?.selectable ?? false,
                   options?.clickable ?? false,
                   options?.onClick,
+                  options?.highlightKeys?.has(cardKey(card)),
                 ),
               )}
             </div>
@@ -895,6 +896,7 @@ function App() {
                       options?.selectable ?? false,
                       options?.clickable ?? false,
                       options?.onClick,
+                      options?.highlightKeys?.has(cardKey(card)),
                     ),
                   )
                 ) : (
@@ -1455,20 +1457,13 @@ function App() {
                 </div>
               ) : activePhase === 'kitty' && isBidder ? (
                 <div className="bidding-card action-card">
-                  <p className="eyebrow">Kitty Actions</p>
-                  <p className="muted">Pickup the kitty and discard five cards.</p>
-                  <div className="postbid-actions">
-                    <button className="primary" onClick={emitPickupKitty}>
-                      Pickup Kitty
+                  <p className="eyebrow">Kitty</p>
+                  <p className="muted">The kitty has been added to your hand. Discard five cards back to the kitty.</p>
+                  <div className="discard-row">
+                    <span className="discard-count">{selectedDiscards.length}/5 selected</span>
+                    <button className="ghost" onClick={emitDiscardKitty} disabled={!canDiscard}>
+                      Discard 5
                     </button>
-                    <div className="discard-row">
-                      <span className="discard-count">
-                        {selectedDiscards.length}/5 selected
-                      </span>
-                      <button className="ghost" onClick={emitDiscardKitty} disabled={!canDiscard}>
-                        Discard 5
-                      </button>
-                    </div>
                   </div>
                 </div>
               ) : (
@@ -1515,6 +1510,8 @@ function App() {
                       selectable: isBidder && activePhase === 'kitty',
                       clickable: Boolean(isTrickTurn),
                       onClick: isTrickTurn ? emitPlayCard : undefined,
+                      highlightKeys:
+                        isBidder && activePhase === 'kitty' ? kittyCardKeys : undefined,
                     },
                     trumpColorForHand,
                     rookRankMode,
@@ -1525,22 +1522,7 @@ function App() {
               )}
             </div>
 
-            {(isBidder && activePhase === 'kitty') || kittyCards.length > 0 ? (
-              <div className="bidding-card kitty-card">
-                <p className="eyebrow">Kitty</p>
-                {activePhase === 'kitty' ? (
-                  <p className="muted">
-                    Kitty cards are now in your hand. Select 5 cards above to discard back to the kitty.
-                  </p>
-                ) : kittyCards.length ? (
-                  <div className="card-grid">
-                    {kittyCards.map((card) => renderCardPill(card, false))}
-                  </div>
-                ) : (
-                  <p className="muted">Kitty will appear here after you discard.</p>
-                )}
-              </div>
-            ) : null}
+            {/* Kitty is folded into the bidder hand; highlight kitty cards during kitty phase. */}
           </section>
         </main>
       )}

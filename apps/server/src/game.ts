@@ -241,14 +241,26 @@ export const reduceGameState = (
       whoseTurnSeat = state.seatOrder[bidder];
       whoseTurnPlayerId = state.playerOrder[bidder];
     }
+
+    // Auto-pickup kitty: bidder receives kitty cards immediately.
+    const kittyPickedUpCards = bidder === null ? [] : state.hand.kitty.slice();
+    const hands = state.hand.hands.map((h) => h.slice());
+    if (bidder !== null) {
+      hands[bidder] = [...hands[bidder], ...kittyPickedUpCards];
+    }
+
     phase = 'kitty';
     hand = {
       ...state.hand,
       phase,
       winningBid,
       bidder,
-      kittyPickedUpCards: [],
-      kittyPickedUp: false,
+      hands,
+      kitty: [],
+      kittyPickedUpCards,
+      kittyPickedUp: bidder !== null,
+      undoAvailableForPlayerId: null,
+      undoState: null,
     };
   }
 

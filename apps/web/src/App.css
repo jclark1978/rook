@@ -764,6 +764,13 @@ button.not-ready {
   background: var(--surface-strong);
 }
 
+.card-pill.card-kitty {
+  box-shadow:
+    0 0 0 3px rgba(168, 39, 44, 0.7),
+    0 6px 14px rgba(25, 20, 15, 0.16),
+    0 2px 0 rgba(255, 255, 255, 0.35) inset;
+}
+
 .card-rook {
   background: #f2e6d0;
 }
