@@ -444,7 +444,8 @@ describe('Game reducer', () => {
     const undo = store.undoPlay('ROOM10', state.playerOrder[3]);
     expect(undo.ok).toBe(false);
     if (!undo.ok) {
-      expect(undo.error).toBe('undo window closed');
+      // After trick completion, undo is no longer offered.
+      expect(undo.error).toBe('no undo available');
     }
   });
 });

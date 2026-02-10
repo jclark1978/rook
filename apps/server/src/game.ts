@@ -635,6 +635,8 @@ export class GameStore {
       handPhase = 'score';
     }
 
+    const undoAllowed = trickCards.length > 0 && phase === 'trick';
+
     const nextState: GameState = {
       ...state,
       phase,
@@ -654,15 +656,17 @@ export class GameStore {
         handScores,
         biddersSet,
         // Undo is only available for the last play, until the next player acts.
-        undoAvailableForPlayerId: playerId,
-        undoState: {
-          ...state,
-          hand: {
-            ...state.hand,
-            undoAvailableForPlayerId: null,
-            undoState: null,
-          },
-        },
+        undoAvailableForPlayerId: undoAllowed ? playerId : null,
+        undoState: undoAllowed
+          ? {
+              ...state,
+              hand: {
+                ...state.hand,
+                undoAvailableForPlayerId: null,
+                undoState: null,
+              },
+            }
+          : null,
       },
     };
 
