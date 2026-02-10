@@ -83,6 +83,7 @@ type HandPublicState = {
   rookRankMode?: RookRankMode
   kittyCount?: number
   whoseTurnSeat?: SeatId | null
+  handSizes?: Record<string, number>
   trickCards?: unknown[]
   handPoints?: [number, number] | null
   biddersSet?: boolean | null
@@ -544,19 +545,28 @@ function App() {
     [handPrivate],
   )
 
-  const trickCards = useMemo(() => {
+  const trickPlays = useMemo(() => {
     const raw = handState?.trickCards
-    if (!Array.isArray(raw)) return []
-    // Server sends trickCards as [{seat, card}...]. Accept either that shape or raw Card[]
-    const cardsOnly = raw
-      .map((entry) => {
-        if (entry && typeof entry === 'object' && 'card' in (entry as any)) {
-          return (entry as any).card
+    if (!Array.isArray(raw)) return [] as Array<{ seat: SeatId; card: Card }>
+
+    const plays: Array<{ seat: SeatId; card: Card }> = []
+    for (const entry of raw) {
+      if (entry && typeof entry === 'object' && 'card' in (entry as any) && 'seat' in (entry as any)) {
+        const seat = String((entry as any).seat) as SeatId
+        const card = normalizeCard((entry as any).card)
+        if (card) plays.push({ seat, card })
+      } else {
+        const card = normalizeCard(entry)
+        if (card) {
+          // fallback shape: no seat info
+          plays.push({ seat: 'T1P1', card })
         }
-        return entry
-      })
-    return normalizeCards(cardsOnly)
+      }
+    }
+    return plays
   }, [handState])
+
+  const trickCards = useMemo(() => trickPlays.map((p) => p.card), [trickPlays])
 
   const selectedDiscardCards = useMemo(() => {
     if (!selectedDiscards.length) return []
@@ -1370,7 +1380,7 @@ function App() {
 
             {activePhase === 'trick' ? (
               <div className="bidding-card trick-card">
-                <p className="eyebrow">Trick Pile</p>
+                <p className="eyebrow">Table</p>
                 <div className="phase-meta">
                   <div>
                     <p className="meta-label">Whose turn</p>
@@ -1381,13 +1391,51 @@ function App() {
                     <p className="meta-value">{trickCards.length}</p>
                   </div>
                 </div>
-                <div className="card-grid">
-                  {trickCards.length ? (
-                    trickCards.map((card) => renderCardPill(card, false))
-                  ) : (
-                    <p className="empty-state">No cards played yet.</p>
-                  )}
-                </div>
+
+                {(() => {
+                  const bySeat = new Map<SeatId, Card>()
+                  for (const play of trickPlays) {
+                    bySeat.set(play.seat, play.card)
+                  }
+                  const countFor = (seat: SeatId) =>
+                    Number(handState?.handSizes?.[seat] ?? 0)
+
+                  return (
+                    <div className="table-grid">
+                      <div className={`table-seat table-top${handState?.whoseTurnSeat === 'T2P1' ? ' is-turn' : ''}`}>
+                        <p className="table-seat-label">T2P1</p>
+                        <p className="table-seat-count">{countFor('T2P1')} cards</p>
+                        {bySeat.get('T2P1') ? renderCardPill(bySeat.get('T2P1')!, false) : null}
+                      </div>
+
+                      <div className={`table-seat table-left${handState?.whoseTurnSeat === 'T1P2' ? ' is-turn' : ''}`}>
+                        <p className="table-seat-label">T1P2</p>
+                        <p className="table-seat-count">{countFor('T1P2')} cards</p>
+                        {bySeat.get('T1P2') ? renderCardPill(bySeat.get('T1P2')!, false) : null}
+                      </div>
+
+                      <div className="table-center">
+                        <p className="table-center-label">Trick</p>
+                        {trickCards.length === 0 ? (
+                          <p className="empty-state">No cards played yet.</p>
+                        ) : null}
+                      </div>
+
+                      <div className={`table-seat table-right${handState?.whoseTurnSeat === 'T2P2' ? ' is-turn' : ''}`}>
+                        <p className="table-seat-label">T2P2</p>
+                        <p className="table-seat-count">{countFor('T2P2')} cards</p>
+                        {bySeat.get('T2P2') ? renderCardPill(bySeat.get('T2P2')!, false) : null}
+                      </div>
+
+                      <div className={`table-seat table-bottom${handState?.whoseTurnSeat === 'T1P1' ? ' is-turn' : ''}`}>
+                        <p className="table-seat-label">T1P1</p>
+                        <p className="table-seat-count">{countFor('T1P1')} cards</p>
+                        {bySeat.get('T1P1') ? renderCardPill(bySeat.get('T1P1')!, false) : null}
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 {trickLog ? <p className="trick-log">{trickLog}</p> : null}
               </div>
             ) : null}
