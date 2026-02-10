@@ -475,7 +475,6 @@ export class GameStore {
     const game = this.games.get(roomCode);
     if (!game) return { ok: false, error: 'game missing' };
     const { state } = game;
-    if (state.phase !== 'trick') return { ok: false, error: 'trick not active' };
 
     const undoAvailableFor = state.hand.undoAvailableForPlayerId;
     const undoState = state.hand.undoState;
@@ -484,6 +483,17 @@ export class GameStore {
     }
     if (undoAvailableFor !== playerId) {
       return { ok: false, error: 'only the last player may undo' };
+    }
+
+    // Disallow undo if the game has advanced past trick play (e.g., scoring).
+    if (state.phase !== 'trick') {
+      return { ok: false, error: 'undo window closed' };
+    }
+
+    // If the last action completed a trick (trickCards cleared), don't allow undo.
+    // This keeps capture tracking and last-trick logic simple and prevents rewinding trick resolution.
+    if (state.hand.trickCards.length === 0) {
+      return { ok: false, error: 'undo window closed' };
     }
 
     // Restore the previous state and clear undo.

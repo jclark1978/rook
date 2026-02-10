@@ -403,4 +403,48 @@ describe('Game reducer', () => {
     expect(finalPlay.value.phase).toBe('score');
     expect(finalPlay.value.gameScore).toEqual(expected.scores);
   });
+
+  it('does not allow undo after a trick completes (4th card)', () => {
+    const createResult = createGameState('ROOM10', createSeats());
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const state = createResult.value;
+    const store = new GameStore();
+    const trickCards = [
+      suitCard('red', 5),
+      suitCard('yellow', 9),
+      suitCard('black', 10),
+      suitCard('green', 1),
+    ];
+
+    (store as { games: Map<string, { state: typeof state }> }).games.set('ROOM10', {
+      state: {
+        ...state,
+        phase: 'trick',
+        whoseTurnSeat: state.seatOrder[0],
+        whoseTurnPlayerId: state.playerOrder[0],
+        hand: {
+          ...state.hand,
+          phase: 'trick',
+          trump: 'red',
+          trickCards: [],
+          trickLeadColor: undefined,
+          hands: [[trickCards[0]], [trickCards[1]], [trickCards[2]], [trickCards[3]]],
+        },
+      },
+    });
+
+    store.playCard('ROOM10', state.playerOrder[0], trickCards[0]);
+    store.playCard('ROOM10', state.playerOrder[1], trickCards[1]);
+    store.playCard('ROOM10', state.playerOrder[2], trickCards[2]);
+    const finalPlay = store.playCard('ROOM10', state.playerOrder[3], trickCards[3]);
+    expect(finalPlay.ok).toBe(true);
+
+    const undo = store.undoPlay('ROOM10', state.playerOrder[3]);
+    expect(undo.ok).toBe(false);
+    if (!undo.ok) {
+      expect(undo.error).toBe('undo window closed');
+    }
+  });
 });
