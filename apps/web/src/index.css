@@ -1,67 +1,63 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Bungee&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Archivo+Black&display=swap');
 
 :root {
-  font-family: 'Space Grotesk', system-ui, sans-serif;
-  line-height: 1.5;
-  font-weight: 500;
-  color: #171312;
-  background-color: #f6f0e4;
+  --bg: #f5f2ea;
+  --bg-deep: #ece8dc;
+  --panel: rgba(255, 255, 255, 0.78);
 
+  --text-strong: #162338;
+  --text-soft: rgba(22, 35, 56, 0.78);
+  --text-faint: rgba(22, 35, 56, 0.58);
+
+  --line: rgba(22, 35, 56, 0.14);
+  --line-strong: rgba(22, 35, 56, 0.26);
+
+  --accent: #04806b;
+  --accent-strong: #e88127;
+
+  --shadow-sm: 0 5px 12px rgba(14, 31, 48, 0.1);
+  --shadow-panel: 0 18px 36px rgba(14, 31, 48, 0.13);
+
+  font-family: 'Manrope', sans-serif;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--text-strong);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-
-  /* Rook-card vibe: paper + ink + bold primary accents */
-  --paper: #f6f0e4;
-  --paper-2: #fbf6ed;
-  --ink: #171312;
-  --ink-soft: rgba(23, 19, 18, 0.75);
-
-  --surface: color-mix(in srgb, var(--paper-2) 88%, white);
-  --surface-strong: #ffffff;
-
-  --border: rgba(23, 19, 18, 0.22);
-  --border-strong: rgba(23, 19, 18, 0.9);
-
-  --accent: #d62828;  /* bold red */
-  --gold: #fcbf49;    /* warm yellow */
-
-  --shadow-soft: 0 10px 18px rgba(23, 19, 18, 0.10);
-  --shadow-strong: 0 18px 30px rgba(23, 19, 18, 0.16);
-  --shadow-cutout: 0 8px 0 rgba(23, 19, 18, 0.85);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--gold) 26%, transparent), transparent 50%),
-    radial-gradient(circle at 80% 20%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 55%),
-    linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+    radial-gradient(circle at 7% 4%, rgba(232, 129, 39, 0.16), transparent 40%),
+    radial-gradient(circle at 87% 12%, rgba(4, 128, 107, 0.16), transparent 42%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%);
+  color: var(--text-strong);
 }
 
-/* subtle paper grain */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background:
-    repeating-radial-gradient(circle at 0 0,
-      rgba(23, 19, 18, 0.018) 0px,
-      rgba(23, 19, 18, 0.018) 1px,
-      transparent 1px,
-      transparent 6px);
-  mix-blend-mode: multiply;
-  opacity: 0.55;
-}
-
-#root {
-  min-height: 100vh;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 28px 28px;
+  opacity: 0.35;
+  mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
 }
 
 a {
@@ -79,6 +75,17 @@ input {
 }
 
 :focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 3px;
+  outline: 3px solid rgba(4, 128, 107, 0.44);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

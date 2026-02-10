@@ -22,11 +22,24 @@ const seats: Seat[] = [
   { id: 'T2P2', label: 'T2P2', team: 'Team Two' },
 ]
 
+const teamSeatGroups: Array<{
+  id: 'team1' | 'team2'
+  label: string
+  className: 'team-one' | 'team-two'
+  seats: SeatId[]
+}> = [
+  { id: 'team1', label: 'Team 1', className: 'team-one', seats: ['T1P1', 'T1P2'] },
+  { id: 'team2', label: 'Team 2', className: 'team-two', seats: ['T2P1', 'T2P2'] },
+]
+
 type RoomState = {
   roomCode: string
   seats: Record<SeatId, string | null>
   players: string[]
   ready: Record<string, boolean>
+  playerNames: Record<string, string>
+  ownerId: string
+  targetScore: number
 }
 
 type RoomAck =
@@ -71,6 +84,8 @@ type GameState = {
   dealerSeat?: SeatId | null
   rookRankMode?: RookRankMode
   gameScores?: [number, number]
+  targetScore?: number
+  winnerTeam?: 0 | 1 | null
 }
 
 type HandPublicState = {
@@ -89,6 +104,8 @@ type HandPublicState = {
   biddersSet?: boolean | null
   gameScores?: [number, number]
   undoAvailableForSeat?: SeatId | null
+  targetScore?: number
+  winnerTeam?: 0 | 1 | null
 }
 
 type HandPrivateState = {
@@ -155,13 +172,6 @@ const normalizeCards = (raw: unknown): Card[] => {
 
 const cardKey = (card: Card): string =>
   card.kind === 'rook' ? 'ROOK' : `${card.color}_${card.rank}`
-
-const SUIT_SYMBOL: Record<TrumpColor, string> = {
-  red: 'R',
-  black: 'B',
-  yellow: 'Y',
-  green: 'G',
-}
 
 // cardLabel retained previously; no longer used with the more realistic card layout.
 
@@ -234,7 +244,10 @@ const buildHandColumns = (
 function App() {
   const [view, setView] = useState<View>('home')
   const [roomCode, setRoomCode] = useState('')
-  const [joinCode, setJoinCode] = useState('')
+  const [entryGameId, setEntryGameId] = useState('')
+  const [playerHandle, setPlayerHandle] = useState('')
+  const [entryTargetScore, setEntryTargetScore] = useState('700')
+  const [entryMode, setEntryMode] = useState<'create' | 'join' | null>(null)
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>('connecting')
   const [roomState, setRoomState] = useState<RoomState | null>(null)
@@ -247,12 +260,24 @@ function App() {
   const [customBid, setCustomBid] = useState('')
   const [selectedDiscards, setSelectedDiscards] = useState<string[]>([])
   const [selectedTrump, setSelectedTrump] = useState<TrumpColor>('red')
-  const [startRookRankMode, setStartRookRankMode] = useState<RookRankMode>('rookHigh')
+  const [selectedDealRookRankMode, setSelectedDealRookRankMode] =
+    useState<RookRankMode>('rookHigh')
   const [infoNotice, setInfoNotice] = useState<{
     id: number
     text: string
   } | null>(null)
+  const [playNotice, setPlayNotice] = useState<{
+    id: number
+    text: string
+  } | null>(null)
+  const [previousTurnSummary, setPreviousTurnSummary] = useState<{
+    signature: string
+    winnerName: string
+    plays: Array<{ seat: SeatId; playerName: string; card: Card; isWinner: boolean }>
+  } | null>(null)
+  const [isPreviousTurnCollapsed, setIsPreviousTurnCollapsed] = useState(false)
   const socketRef = useRef<Socket | null>(null)
+  const ROOM_CODE_REGEX = /^[A-Z0-9]{4}$/
 
   useEffect(() => {
     // If you open the web UI from another device, `localhost` would point at *that* device.
@@ -284,6 +309,14 @@ function App() {
 
     const stablePlayerId = getStablePlayerId()
     stablePlayerIdRef.current = stablePlayerId
+    try {
+      const storedName = window.localStorage.getItem('rook:playerName')
+      if (storedName && storedName.trim()) {
+        setPlayerHandle(storedName.trim().slice(0, 24))
+      }
+    } catch {
+      // ignore
+    }
 
     const socket: Socket = io(serverUrl, {
       autoConnect: true,
@@ -343,6 +376,13 @@ function App() {
     }
     const handleGameError = (payload: { message?: string }) => {
       if (payload?.message) {
+        if (payload.message.toLowerCase().includes('illegal play')) {
+          setPlayNotice({
+            id: Date.now(),
+            text: 'Illegal Move: You must play a card matching the suite that lead',
+          })
+          return
+        }
         setErrorMessage(payload.message)
       }
     }
@@ -379,6 +419,15 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!playerHandle.trim()) return
+    try {
+      window.localStorage.setItem('rook:playerName', playerHandle.trim().slice(0, 24))
+    } catch {
+      // ignore
+    }
+  }, [playerHandle])
+
+  useEffect(() => {
     if (!infoNotice) return
     const timeout = window.setTimeout(() => {
       setInfoNotice(null)
@@ -392,22 +441,43 @@ function App() {
     return 'Disconnected'
   }, [connectionStatus])
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = (
+    requestedCode?: string,
+    requestedName?: string,
+    requestedTargetScore?: number,
+  ) => {
     const socket = socketRef.current
     if (!socket) {
       setErrorMessage('Unable to connect to the lobby server.')
       return
     }
+    const trimmedName = requestedName?.trim()
+    if (!trimmedName) {
+      setErrorMessage('Enter your name before creating a room.')
+      return
+    }
+    const trimmedCode = requestedCode?.trim().toUpperCase()
+    if (trimmedCode && !ROOM_CODE_REGEX.test(trimmedCode)) {
+      setErrorMessage('Game ID must be 4 characters.')
+      return
+    }
     setErrorMessage('')
     socket.emit(
       'room:create',
-      { playerId: stablePlayerIdRef.current },
+      {
+        playerId: stablePlayerIdRef.current,
+        playerName: trimmedName.slice(0, 24),
+        roomCode: trimmedCode || undefined,
+        targetScore: requestedTargetScore,
+      },
       (response: RoomAck) => {
         if (response?.ok) {
           setRoomCode(response.roomCode)
           setPlayerId(response.playerId)
           setRoomState(response.state)
           setView('lobby')
+          setEntryMode(null)
+          setEntryGameId('')
         } else if (response?.message) {
           setErrorMessage(response.message)
         }
@@ -415,9 +485,17 @@ function App() {
     )
   }
 
-  const handleJoinRoom = () => {
-    const trimmed = joinCode.trim().toUpperCase()
-    if (!trimmed) return
+  const handleJoinRoom = (requestedCode: string, requestedName: string) => {
+    const trimmed = requestedCode.trim().toUpperCase()
+    const trimmedName = requestedName.trim()
+    if (!ROOM_CODE_REGEX.test(trimmed)) {
+      setErrorMessage('Game ID must be 4 characters.')
+      return
+    }
+    if (!trimmedName) {
+      setErrorMessage('Enter your name before joining.')
+      return
+    }
     const socket = socketRef.current
     if (!socket) {
       setErrorMessage('Unable to connect to the lobby server.')
@@ -426,13 +504,19 @@ function App() {
     setErrorMessage('')
     socket.emit(
       'room:join',
-      { roomCode: trimmed, playerId: stablePlayerIdRef.current },
+      {
+        roomCode: trimmed,
+        playerId: stablePlayerIdRef.current,
+        playerName: trimmedName.slice(0, 24),
+      },
       (response: RoomAck) => {
       if (response?.ok) {
         setRoomCode(response.roomCode)
         setPlayerId(response.playerId)
         setRoomState(response.state)
         setView('lobby')
+        setEntryMode(null)
+        setEntryGameId('')
       } else if (response?.message) {
         setErrorMessage(response.message)
       }
@@ -450,17 +534,6 @@ function App() {
     socket.emit('room:sit', { roomCode, seat: id })
   }
 
-  const toggleReady = (ready: boolean) => {
-    if (!roomCode) return
-    const socket = socketRef.current
-    if (!socket) {
-      setErrorMessage('Unable to connect to the lobby server.')
-      return
-    }
-    setErrorMessage('')
-    socket.emit('room:ready', { roomCode, ready })
-  }
-
   const handleStartGame = () => {
     if (!roomCode) return
     const socket = socketRef.current
@@ -469,7 +542,57 @@ function App() {
       return
     }
     setErrorMessage('')
-    socket.emit('game:start', { roomCode, settings: { rookRankMode: startRookRankMode } })
+    socket.emit('game:start', { roomCode })
+  }
+
+  const emitDealHand = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('game:deal', { roomCode, rookRankMode: selectedDealRookRankMode })
+  }
+
+  const handleCopyRoomCode = async () => {
+    if (!roomCode) return
+    const fallbackCopy = () => {
+      const el = document.createElement('textarea')
+      el.value = roomCode
+      el.setAttribute('readonly', '')
+      el.style.position = 'absolute'
+      el.style.left = '-9999px'
+      document.body.appendChild(el)
+      el.select()
+      const copied = document.execCommand('copy')
+      document.body.removeChild(el)
+      return copied
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(roomCode)
+        setInfoNotice({ id: Date.now(), text: `Copied room code ${roomCode}` })
+        return
+      }
+      const copied = fallbackCopy()
+      setInfoNotice({
+        id: Date.now(),
+        text: copied
+          ? `Copied room code ${roomCode}`
+          : `Could not copy. Room code is ${roomCode}`,
+      })
+    } catch {
+      const copied = fallbackCopy()
+      setInfoNotice({
+        id: Date.now(),
+        text: copied
+          ? `Copied room code ${roomCode}`
+          : `Could not copy. Room code is ${roomCode}`,
+      })
+    }
   }
 
   const biddingState: BiddingState | null = useMemo(() => {
@@ -531,6 +654,13 @@ function App() {
       ? seatOrder[biddingState.highBid.player]
       : null)
 
+  const bidderPartnerSeat = useMemo(() => {
+    if (!bidderSeat) return null
+    const bidderIndex = seatOrder.indexOf(bidderSeat)
+    if (bidderIndex < 0) return null
+    return seatOrder[(bidderIndex + 2) % 4] ?? null
+  }, [bidderSeat])
+
   const isBidder = Boolean(mySeat && bidderSeat === mySeat.id)
 
   const handCards = useMemo(
@@ -587,24 +717,12 @@ function App() {
     setSelectedDiscards([])
   }, [handCards, activePhase])
 
-  const [trickLog, setTrickLog] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (activePhase !== 'trick') {
-      setTrickLog(null)
-      return
-    }
-    if (trickCards.length === 4) {
-      setTrickLog('Trick complete. Clearing for the next lead.')
-      return
-    }
-    if (trickCards.length === 0) {
-      setTrickLog(null)
-    }
-  }, [activePhase, trickCards.length])
+  const dealerSeat = handState?.dealerSeat ?? gameState?.dealerSeat ?? null
 
   const phaseTitle = useMemo(() => {
     switch (activePhase) {
+      case 'preDeal':
+        return 'Dealer Setup'
       case 'kitty':
         return 'Kitty Pickup'
       case 'declareTrump':
@@ -613,12 +731,19 @@ function App() {
         return 'Trick Play'
       case 'score':
         return 'Scoring'
+      case 'gameOver':
+        return 'Game Over'
       default:
         return 'Bidding'
     }
   }, [activePhase])
 
   const phaseStatus = useMemo(() => {
+    if (activePhase === 'preDeal') {
+      return mySeat?.id === dealerSeat
+        ? 'Choose Rook High/Low and press Deal to start bidding.'
+        : 'Waiting for dealer to choose rules and deal.'
+    }
     if (activePhase === 'kitty') {
       return isBidder
         ? 'Pick up the kitty, then discard five cards.'
@@ -635,8 +760,11 @@ function App() {
     if (activePhase === 'score') {
       return 'Hand complete. Review the summary below.'
     }
+    if (activePhase === 'gameOver') {
+      return 'Target score reached. Final results below.'
+    }
     return 'Bidding in progress.'
-  }, [activePhase, isBidder])
+  }, [activePhase, isBidder, mySeat, dealerSeat])
 
   const currentTrump = useMemo((): TrumpColor | null => {
     if (!handState) return null
@@ -651,12 +779,19 @@ function App() {
 
   const rookRankMode: RookRankMode =
     handState?.rookRankMode ?? gameState?.rookRankMode ?? 'rookHigh'
+  const targetScore =
+    handState?.targetScore ?? gameState?.targetScore ?? roomState?.targetScore ?? 700
+  const houseRuleLabel = rookRankMode === 'rookLow' ? 'Rook Low' : 'Rook High'
 
-  const kittyCount = handState?.kittyCount ?? kittyCards.length
-
-  const dealerSeat = handState?.dealerSeat ?? gameState?.dealerSeat ?? null
+  useEffect(() => {
+    if (activePhase !== 'preDeal') return
+    setSelectedDealRookRankMode(rookRankMode)
+  }, [activePhase, rookRankMode])
 
   const gameScores = handState?.gameScores ?? gameState?.gameScores ?? null
+  const gameWinnerTeam = handState?.winnerTeam ?? gameState?.winnerTeam ?? null
+  const gameWinnerLabel =
+    gameWinnerTeam === 0 ? 'Team 1' : gameWinnerTeam === 1 ? 'Team 2' : null
 
   const emitBid = (amount: number) => {
     if (!roomCode) return
@@ -678,6 +813,17 @@ function App() {
     }
     setErrorMessage('')
     socket.emit('room:clearSeat', { roomCode, seat })
+  }
+
+  const emitLeaveSeat = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('room:leave', { roomCode })
   }
 
   const emitPass = () => {
@@ -787,7 +933,9 @@ function App() {
   ) => {
     const key = cardKey(card)
     const selected = selectedDiscards.includes(key)
-    const baseClass = `card-pill card-${card.kind === 'rook' ? 'rook' : card.color}`
+    const rookTrumpClass =
+      card.kind === 'rook' && currentTrump ? ` rook-trump-${currentTrump}` : ''
+    const baseClass = `card-pill card-${card.kind === 'rook' ? 'rook' : card.color}${rookTrumpClass}`
     const highlightClass = highlight ? ' card-kitty' : ''
     const className = selectable
       ? `${baseClass} card-select${selected ? ' selected' : ''}${highlightClass}`
@@ -797,8 +945,14 @@ function App() {
     const content =
       card.kind === 'rook' ? (
         <>
-          <div className="card-corner">
-            <span className="card-rank">ROOK</span>
+          <div className="card-corner card-corner-rook">
+            <span
+              className={`card-rank card-rank-rook${
+                currentTrump ? ` rook-trump-${currentTrump}` : ''
+              }`}
+            >
+              ROOK
+            </span>
           </div>
           <div className="card-center">
             <img src={rookCard} alt="Rook" className="card-rook" />
@@ -808,14 +962,16 @@ function App() {
         <>
           <div className="card-corner">
             <span className="card-rank">{card.rank}</span>
-            <span className="card-suit">{SUIT_SYMBOL[card.color]}</span>
+            <span className="card-color-name">{COLOR_LABELS[card.color].toUpperCase()}</span>
           </div>
           <div className="card-center">
-            <span className="card-suit-big">{SUIT_SYMBOL[card.color]}</span>
+            <div className="card-center-frame">
+              <span className="card-center-rank">{card.rank}</span>
+            </div>
           </div>
           <div className="card-corner card-corner-bottom">
             <span className="card-rank">{card.rank}</span>
-            <span className="card-suit">{SUIT_SYMBOL[card.color]}</span>
+            <span className="card-color-name">{COLOR_LABELS[card.color].toUpperCase()}</span>
           </div>
         </>
       )
@@ -910,6 +1066,69 @@ function App() {
     )
   }
 
+  const getPlayerName = (id: string) => {
+    const fromState = roomState?.playerNames?.[id]?.trim()
+    if (fromState) return fromState
+    const shortId = id.slice(0, 6).toUpperCase()
+    return shortId ? `Guest ${shortId}` : 'Guest'
+  }
+
+  const getSeatDisplayName = (seatId: SeatId) => {
+    const owner = roomState?.seats?.[seatId]
+    if (!owner) return 'Open Seat'
+    if (owner === playerId) return 'You'
+    return getPlayerName(owner)
+  }
+
+  const getOpenSeatPlaceholder = (seatId: SeatId) =>
+    seatId.endsWith('P1') ? 'Player 1' : 'Player 2'
+
+  const formatTrumpLabel = (trump: string | null) => {
+    if (!trump) return null
+    return trump.charAt(0).toUpperCase() + trump.slice(1)
+  }
+
+  const winningBidAmount = handState?.winningBid?.amount ?? biddingState?.highBid?.amount ?? null
+  const bidLabelForSeat = (seat: SeatId) => {
+    if (seat === bidderSeat) {
+      return winningBidAmount ? `★ Bid: ${winningBidAmount}` : '★ Bid'
+    }
+    if (seat === bidderPartnerSeat) {
+      return winningBidAmount ? `Bid: ${winningBidAmount}` : 'Bid'
+    }
+    return null
+  }
+
+  const getTeamSeatLabel = (seatId: SeatId) => {
+    const teamNumber = seatId.startsWith('T1') ? '1' : '2'
+    return `Team ${teamNumber}: ${getSeatDisplayName(seatId)}`
+  }
+
+  useEffect(() => {
+    if (activePhase !== 'trick') {
+      setPreviousTurnSummary(null)
+      return
+    }
+    if (trickPlays.length !== 4) return
+    const winnerSeat = handState?.whoseTurnSeat
+    if (!winnerSeat) return
+    const signature = `${winnerSeat}:${trickPlays.map((play) => cardKey(play.card)).join('|')}`
+    setPreviousTurnSummary((current) => {
+      if (current?.signature === signature) return current
+      return {
+        signature,
+        winnerName: getSeatDisplayName(winnerSeat),
+        plays: trickPlays.map((play) => ({
+          seat: play.seat,
+          playerName: getSeatDisplayName(play.seat),
+          card: play.card,
+          isWinner: play.seat === winnerSeat,
+        })),
+      }
+    })
+    setIsPreviousTurnCollapsed(false)
+  }, [activePhase, trickPlays, handState, roomState, playerId])
+
   const renderSeatStrip = () => {
     const allowSeatPick = Boolean(roomState) && !mySeat
 
@@ -920,32 +1139,54 @@ function App() {
           const isMine = owner === playerId
           const isOpen = !owner
           const isDealer = dealerSeat === seat.id
+          const isTurnSeat = activePhase === 'trick' && handState?.whoseTurnSeat === seat.id
           const className = `seat-pill${isMine ? ' is-mine' : ''}${
             allowSeatPick && isOpen ? ' is-clickable' : ''
           }`
 
           const content = (
             <>
-              <span>{seat.label}</span>
-              {isDealer ? <span className="dealer-badge">D</span> : null}
-              <span className="seat-status">{isOpen ? 'OPEN' : 'TAKEN'}</span>
-              {!isOpen && !isMine ? (
-                <button
-                  type="button"
-                  className="ghost seat-clear"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    if (
-                      window.confirm(
-                        `Mark ${seat.label} as dropped? This only works if they are truly disconnected.`,
-                      )
-                    ) {
-                      emitClearSeat(seat.id)
-                    }
-                  }}
-                >
-                  Drop
-                </button>
+              <div className="seat-pill-head">
+                {!isOpen && !isMine ? (
+                  <details className="seat-pill-menu">
+                    <summary className="seat-pill-name seat-pill-name-button">
+                      {getSeatDisplayName(seat.id)}
+                    </summary>
+                    <div className="seat-pill-menu-popover">
+                      <button
+                        type="button"
+                        className="ghost seat-clear"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          if (
+                            window.confirm(
+                              `Mark ${getSeatDisplayName(seat.id)} as dropped? This only works if they are truly disconnected.`,
+                            )
+                          ) {
+                            emitClearSeat(seat.id)
+                          }
+                        }}
+                      >
+                        Drop
+                      </button>
+                    </div>
+                  </details>
+                ) : (
+                  <span className="seat-pill-name">{getSeatDisplayName(seat.id)}</span>
+                )}
+                <div className="seat-pill-flags">
+                  {isTurnSeat ? <span className="seat-flag turn">Turn</span> : null}
+                  {isDealer ? <span className="dealer-badge">D</span> : null}
+                </div>
+              </div>
+              {isOpen ? <span className="seat-status">OPEN</span> : null}
+              {activePhase === 'trick' && bidLabelForSeat(seat.id) ? (
+                <span className="seat-flag bid-winner">{bidLabelForSeat(seat.id)}</span>
+              ) : null}
+              {activePhase === 'trick' && bidderSeat === seat.id && currentTrump ? (
+                <span className={`seat-flag trump trump-${currentTrump}`}>
+                  Trump: {formatTrumpLabel(currentTrump)}
+                </span>
               ) : null}
             </>
           )
@@ -973,6 +1214,38 @@ function App() {
     )
   }
 
+  const normalizedEntryGameId = entryGameId.trim().toUpperCase()
+  const normalizedHandle = playerHandle.trim()
+  const parsedTargetScore = Number(entryTargetScore)
+  const normalizedTargetScore = Number.isFinite(parsedTargetScore)
+    ? Math.min(2000, Math.max(100, Math.round(parsedTargetScore)))
+    : 700
+  const isEntryGameIdValid = ROOM_CODE_REGEX.test(normalizedEntryGameId)
+  const canJoinFromEntry = isEntryGameIdValid && normalizedHandle.length > 0
+  const canCreateFromEntry =
+    normalizedHandle.length > 0 &&
+    (normalizedEntryGameId.length === 0 || isEntryGameIdValid)
+
+  const openEntryModal = (mode: 'create' | 'join') => {
+    setEntryMode(mode)
+    setErrorMessage('')
+  }
+
+  const closeEntryModal = () => {
+    setEntryMode(null)
+    setErrorMessage('')
+  }
+
+  const submitEntry = () => {
+    if (entryMode === 'join') {
+      if (!canJoinFromEntry) return
+      handleJoinRoom(normalizedEntryGameId, normalizedHandle)
+      return
+    }
+    if (!canCreateFromEntry) return
+    handleCreateRoom(normalizedEntryGameId || undefined, normalizedHandle, normalizedTargetScore)
+  }
+
   return (
     <div className="app-shell">
       <header className="top-bar">
@@ -981,8 +1254,8 @@ function App() {
             <img src={rookCard} alt="" />
           </span>
           <div>
-            <p className="brand-title">Rook Online</p>
-            <p className="brand-subtitle">Table lobby prototype</p>
+            <p className="brand-title">The Rook Room</p>
+            <p className="brand-subtitle">Good friends, bad bids, great memories.</p>
           </div>
         </div>
         <div className={`status-pill status-${connectionStatus}`}>
@@ -1007,6 +1280,76 @@ function App() {
           </button>
         </div>
       ) : null}
+      {activePhase === 'trick' && playNotice ? (
+        <div className="play-popover" role="alert">
+          <span>{playNotice.text}</span>
+          <button
+            type="button"
+            className="ghost play-popover-dismiss"
+            onClick={() => setPlayNotice(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+      {entryMode ? (
+        <div className="entry-overlay" role="dialog" aria-modal="true">
+          <section className="entry-modal">
+            <p className="eyebrow">{entryMode === 'join' ? 'Join Game' : 'Create Game'}</p>
+            <h2>{entryMode === 'join' ? 'Enter Lobby' : 'Start a Lobby'}</h2>
+            <p className="muted">
+              Set your handle and game key before entering the lobby.
+            </p>
+            <div className="entry-form">
+              <label htmlFor="entry-game-id" className="meta-label">Game ID</label>
+              <input
+                id="entry-game-id"
+                value={entryGameId}
+                onChange={(event) => setEntryGameId(event.target.value.toUpperCase())}
+                placeholder={entryMode === 'join' ? 'AB12' : 'Optional (AB12)'}
+                maxLength={4}
+                className="entry-code-input"
+              />
+              <label htmlFor="entry-player-name" className="meta-label">What's your name?</label>
+              <input
+                id="entry-player-name"
+                value={playerHandle}
+                onChange={(event) => setPlayerHandle(event.target.value)}
+                placeholder="Your handle"
+                maxLength={24}
+              />
+              {entryMode === 'create' ? (
+                <>
+                  <label htmlFor="entry-target-score" className="meta-label">Game Winning Score</label>
+                  <input
+                    id="entry-target-score"
+                    type="number"
+                    min={100}
+                    max={2000}
+                    step={5}
+                    value={entryTargetScore}
+                    onChange={(event) => setEntryTargetScore(event.target.value)}
+                    placeholder="700"
+                  />
+                </>
+              ) : null}
+            </div>
+            <div className="entry-actions">
+              <button type="button" className="ghost" onClick={closeEntryModal}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={submitEntry}
+                disabled={entryMode === 'join' ? !canJoinFromEntry : !canCreateFromEntry}
+              >
+                {entryMode === 'join' ? 'Join Game' : 'Create Game'}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {view === 'home' ? (
         <main className="home">
@@ -1017,139 +1360,149 @@ function App() {
           ) : null}
           <section className="hero">
             <div>
-              <h1>Rook Online</h1>
+              <h1>The Rook Room</h1>
               <p>
-                Spin up a room, grab a seat, and get ready for partner play.
-                This is the shell UI while the game logic comes online.
+                The Rook Room is a connected space where friends and family can create or join a
+                table, take their seats, and enjoy classic partner-based Rook. Form your teams,
+                play your hands, and compete for bragging rights in a fast, simple, and social
+                multiplayer experience built around the game you know and love.
               </p>
             </div>
             <div className="hero-actions">
-              <button className="primary" onClick={handleCreateRoom}>
+              <button className="primary" onClick={() => openEntryModal('create')}>
                 Create Room
               </button>
               <div className="join-block">
-                <label htmlFor="joinCode">Join room</label>
-                <div className="join-row">
-                  <input
-                    id="joinCode"
-                    value={joinCode}
-                    onChange={(event) => setJoinCode(event.target.value)}
-                    placeholder="ROOM"
-                    maxLength={6}
-                  />
-                  <button className="ghost" onClick={handleJoinRoom}>
-                    Join
-                  </button>
-                </div>
+                <label>Join room</label>
+                <button className="ghost" onClick={() => openEntryModal('join')}>
+                  Join with Code
+                </button>
               </div>
             </div>
           </section>
 
-          <section className="info-grid">
-            <div className="info-card">
-              <h2>Fast room flow</h2>
-              <p>
-                Create a room or jump into one with a short code. The lobby view
-                below is the staging ground for the full multiplayer experience.
-              </p>
-            </div>
-            <div className="info-card">
-              <h2>Seat-ready layout</h2>
-              <p>
-                Two teams, four seats, and ready toggles. Hook these into the
-                server later to unlock coordinated starts.
-              </p>
-            </div>
-          </section>
         </main>
       ) : view === 'lobby' ? (
-        <main className="lobby">
+        <main className="lobby lobby-modern">
           {errorMessage ? (
             <div className="error-banner" role="alert">
               {errorMessage}
             </div>
           ) : null}
-          <section className="lobby-header">
-            <div>
-              <p className="eyebrow">Lobby</p>
-              <h1>{roomCode || 'ROOM'}</h1>
-              <p className="muted">Share this code to bring players in.</p>
-            </div>
-            <div className="lobby-actions">
-              <div className="lobby-setting">
-                <p className="meta-label">Rook</p>
-                <div className="lobby-setting-buttons">
+          <section className="lobby-grid">
+            <aside className="lobby-config-card">
+              <div>
+                <p className="eyebrow">Game Configuration</p>
+                <h1>{roomCode || 'ROOM'}</h1>
+                <p className="muted">Share this room code with your players.</p>
+              </div>
+
+              <div className="lobby-code-block">
+                <p className="meta-label">Game ID</p>
+                <div className="lobby-code-row">
+                  <code>{roomCode || 'ROOM'}</code>
                   <button
                     type="button"
-                    className={startRookRankMode === 'rookHigh' ? 'primary' : 'ghost'}
-                    onClick={() => setStartRookRankMode('rookHigh')}
+                    className="ghost icon-button"
+                    onClick={handleCopyRoomCode}
+                    aria-label="Copy room code"
                   >
-                    High
-                  </button>
-                  <button
-                    type="button"
-                    className={startRookRankMode === 'rookLow' ? 'primary' : 'ghost'}
-                    onClick={() => setStartRookRankMode('rookLow')}
-                  >
-                    Low
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M9 9h11v11H9z" />
+                      <path d="M4 4h11v2H6v9H4z" />
+                    </svg>
                   </button>
                 </div>
               </div>
 
-              {mySeat && roomState?.ready?.[playerId] ? (
-                <button className="primary" onClick={handleStartGame}>
+              <div className="lobby-config-actions">
+                <button
+                  className="primary"
+                  onClick={handleStartGame}
+                  disabled={!(mySeat && roomState?.ready?.[playerId])}
+                >
                   Start Game
                 </button>
-              ) : null}
-              <button className="ghost" onClick={() => setView('home')}>
-                Back to Home
-              </button>
-            </div>
-          </section>
+                <button className="ghost" onClick={() => setView('home')}>
+                  Back to Home
+                </button>
+              </div>
+            </aside>
 
-          <section className="seat-grid">
-            {seats.map((seat) => {
-              const seatOwner = roomState?.seats[seat.id] ?? null
-              const isMine = seatOwner === playerId
-              const seatReady = seatOwner
-                ? Boolean(roomState?.ready?.[seatOwner])
-                : false
-              const isDealer = dealerSeat === seat.id
-              return (
-                <div key={seat.id} className="seat-card">
-                  <div>
-                    <div className="seat-id-row">
-                      <p className="seat-id">{seat.label}</p>
-                      {isDealer ? <span className="dealer-badge">D</span> : null}
-                    </div>
-                    <p className="seat-team">{seat.team}</p>
-                    <p className="seat-occupant">
-                      {seatOwner
-                        ? isMine
-                          ? 'You are seated'
-                          : 'Occupied'
-                        : 'Open seat'}
-                    </p>
+            <div className="lobby-teams">
+              {teamSeatGroups.map((team) => (
+                <section key={team.id} className={`team-card ${team.className}`}>
+                  <div className="team-card-header">
+                    <p className="eyebrow">{team.label}</p>
                   </div>
-                  <div className="seat-actions">
-                    <button
-                      className="ghost"
-                      onClick={() => handleSeat(seat.id)}
-                      disabled={Boolean(seatOwner && !isMine)}
-                    >
-                      {seatOwner ? (isMine ? 'Your Seat' : 'Taken') : 'Sit Here'}
-                    </button>
-                    <button
-                      className={seatReady ? 'ready' : 'not-ready'}
-                      onClick={() => toggleReady(!seatReady)}
-                      disabled={!isMine}
-                    >
-                      {seatOwner ? (seatReady ? 'Ready' : 'Not Ready') : 'Empty'}
-                    </button>
+                  <div className="team-seat-grid">
+                    {team.seats.map((seatId) => {
+                      const seatOwner = roomState?.seats[seatId] ?? null
+                      const isMine = seatOwner === playerId
+                      const isDealer = dealerSeat === seatId
+
+                      return (
+                        <article
+                          key={seatId}
+                          className={`team-seat-card${isMine ? ' is-mine' : ''}`}
+                        >
+                          <div className="team-seat-top">
+                            <p className="seat-id">
+                              {isMine
+                                ? 'You'
+                                : getOpenSeatPlaceholder(seatId)}
+                            </p>
+                            {isDealer ? <span className="dealer-badge">D</span> : null}
+                          </div>
+                          <p className="seat-team">
+                            {seatOwner ? getPlayerName(seatOwner) : 'Open Seat'}
+                          </p>
+
+                          {seatOwner ? (
+                            <>
+                              <p className="team-seat-status">
+                                <span
+                                  className="ready-dot is-ready"
+                                  aria-hidden="true"
+                                />
+                                Ready
+                              </p>
+                              <div className="team-seat-actions">
+                                {isMine ? (
+                                  <button
+                                    className="ghost"
+                                    onClick={emitLeaveSeat}
+                                  >
+                                    Leave
+                                  </button>
+                                ) : (
+                                  <button className="ghost" disabled>
+                                    Occupied
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <p className="team-seat-status">
+                                <span className="ready-dot" aria-hidden="true" />
+                                Waiting
+                              </p>
+                              <button
+                                className="ghost"
+                                onClick={() => handleSeat(seatId)}
+                              >
+                                Join Team
+                              </button>
+                            </>
+                          )}
+                        </article>
+                      )
+                    })}
                   </div>
-                </div>
-              )
-            })}
+                </section>
+              ))}
+            </div>
           </section>
         </main>
       ) : view === 'bidding' ? (
@@ -1165,8 +1518,13 @@ function App() {
               <h1>{roomCode || 'ROOM'}</h1>
               <p className="muted">Open bids are visible to everyone.</p>
             </div>
-            <div className="lobby-actions">
-              <button className="ghost" onClick={() => setView('lobby')}>
+            <div className="gameplay-header-actions">
+              <div className="house-rules-panel">
+                <p className="meta-label">House Rules</p>
+                <p className="meta-value">{houseRuleLabel}</p>
+                <p className="meta-value">Game Winning Score: {targetScore}</p>
+              </div>
+              <button className="ghost compact-button" onClick={() => setView('lobby')}>
                 Back to Lobby
               </button>
             </div>
@@ -1174,33 +1532,6 @@ function App() {
           {renderSeatStrip()}
 
           <section className="bidding-grid">
-            <div className="bidding-card high-bid">
-              <p className="eyebrow">High Bid</p>
-              <div className="bidding-highlight">
-                <p className="bidding-amount">
-                  {biddingState?.highBid ? biddingState.highBid.amount : '—'}
-                </p>
-                <p className="bidding-seat">
-                  {biddingState?.highBid
-                    ? seatOrder[biddingState.highBid.player] ?? 'Unknown seat'
-                    : 'No bids yet'}
-                </p>
-              </div>
-              <div className="bidding-meta">
-                <div>
-                  <p className="meta-label">Whose turn</p>
-                  <p className="meta-value">
-                    {currentPlayerSeat ?? 'Waiting'}{' '}
-                    {isMyTurn ? '(You)' : ''}
-                  </p>
-                </div>
-                <div>
-                  <p className="meta-label">Bid step</p>
-                  <p className="meta-value">{bidStep}</p>
-                </div>
-              </div>
-            </div>
-
             <div className="bidding-card">
               <p className="eyebrow">Your Action</p>
               <div className="bidding-actions">
@@ -1246,7 +1577,7 @@ function App() {
                   <ul className="history-list">
                     {(biddingState?.history?.length ?? 0) > 0 ? (
                       biddingState?.history?.map((entry, index) => {
-                        const seatLabel = seatOrder[entry.player] ?? 'Unknown seat'
+                        const seatLabel = seatOrder[entry.player] ?? null
                         const actionLabel =
                           entry.type === 'bid'
                             ? `Bid ${entry.amount}`
@@ -1255,7 +1586,7 @@ function App() {
                               : 'Pass-Partner'
                         return (
                           <li key={`${entry.type}-${index}`}>
-                            <span>{seatLabel}</span>
+                            <span>{seatLabel ? getSeatDisplayName(seatLabel) : 'Unknown seat'}</span>
                             <span>{actionLabel}</span>
                           </li>
                         )
@@ -1302,41 +1633,30 @@ function App() {
               <p className="eyebrow">{phaseTitle}</p>
               <h1>{roomCode || 'ROOM'}</h1>
               <p className="muted">{phaseStatus}</p>
-              <div className="top-meta">
-                <div>
-                  <p className="meta-label">Turn</p>
-                  <p className="meta-value">{handState?.whoseTurnSeat ?? '—'}</p>
-                </div>
-                <div>
-                  <p className="meta-label">Bidder</p>
-                  <p className="meta-value">{bidderSeat ?? '—'}</p>
-                </div>
-                <div>
-                  <p className="meta-label">Dealer</p>
-                  <p className="meta-value">{dealerSeat ?? '—'}</p>
-                </div>
-                <div>
-                  <p className="meta-label">Trump</p>
-                  <p className="meta-value">{currentTrump ?? '—'}</p>
-                </div>
-                <div>
-                  <p className="meta-label">Kitty</p>
-                  <p className="meta-value">{kittyCount ? `${kittyCount}` : '—'}</p>
-                </div>
-              </div>
             </div>
-            <div className="lobby-actions">
-              <button className="ghost" onClick={() => setView('lobby')}>
+            <div className="gameplay-header-actions">
+              <div className="house-rules-panel">
+                <p className="meta-label">House Rules</p>
+                <p className="meta-value">{houseRuleLabel}</p>
+                <p className="meta-value">Game Winning Score: {targetScore}</p>
+              </div>
+              <button className="ghost compact-button" onClick={() => setView('lobby')}>
                 Back to Lobby
               </button>
             </div>
           </section>
           {renderSeatStrip()}
 
-          <section className={`postbid-grid${activePhase === 'trick' ? ' is-trick' : ''}`}>
-            {activePhase === 'score' ? (
+          <section
+            className={`postbid-grid${activePhase === 'trick' ? ' is-trick' : ''}${
+              activePhase === 'kitty' ? ' is-kitty' : ''
+            }${
+              activePhase === 'declareTrump' ? ' is-declare' : ''
+            }`}
+          >
+            {activePhase === 'score' || activePhase === 'gameOver' ? (
               <div className="bidding-card summary-card">
-                <p className="eyebrow">Hand Summary</p>
+                <p className="eyebrow">{activePhase === 'gameOver' ? 'Final Summary' : 'Hand Summary'}</p>
                 <div className="summary-grid">
                   <div>
                     <p className="meta-label">Winning bid</p>
@@ -1344,7 +1664,7 @@ function App() {
                       {handState?.winningBid
                         ? `${handState.winningBid.amount}`
                         : '—'}{' '}
-                      {bidderSeat ? `(${bidderSeat})` : ''}
+                      {bidderSeat ? `(${getSeatDisplayName(bidderSeat)})` : ''}
                     </p>
                   </div>
                   <div>
@@ -1376,13 +1696,33 @@ function App() {
                     </p>
                   </div>
                 </div>
-                <button
-                  className="primary"
-                  onClick={emitNextHand}
-                  disabled={activePhase !== 'score'}
-                >
-                  Next Hand
-                </button>
+                {activePhase === 'gameOver' && gameWinnerLabel ? (
+                  <div className={`victory-banner team-${gameWinnerTeam === 0 ? 'one' : 'two'}`}>
+                    <div className="victory-fireworks" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                    <p className="victory-eyebrow">Game Over</p>
+                    <h2>{`${gameWinnerLabel.toUpperCase()} WON!`}</h2>
+                  </div>
+                ) : null}
+                {activePhase === 'score' ? (
+                  <button
+                    className="primary"
+                    onClick={emitNextHand}
+                    disabled={activePhase !== 'score'}
+                  >
+                    Next Hand
+                  </button>
+                ) : (
+                  <p className="meta-value">
+                    Winner: {gameWinnerLabel ?? '—'}
+                  </p>
+                )}
               </div>
             ) : null}
             {/* Phase Info panel removed; key info now shown in the top header row. */}
@@ -1396,51 +1736,193 @@ function App() {
                   for (const play of trickPlays) {
                     bySeat.set(play.seat, play.card)
                   }
-                  const countFor = (seat: SeatId) =>
-                    Number(handState?.handSizes?.[seat] ?? 0)
+                  const awaitingNextLead = trickPlays.length === 4
+                  const waitingWinnerSeat =
+                    previousTurnSummary?.plays.find((play) => play.isWinner)?.seat ??
+                    handState?.whoseTurnSeat ??
+                    null
+                  const waitingWinnerLabel = waitingWinnerSeat
+                    ? getTeamSeatLabel(waitingWinnerSeat)
+                    : null
+                  const trickSpots: Array<{ seat: SeatId; className: string }> = [
+                    { seat: 'T2P1', className: 'top' },
+                    { seat: 'T1P1', className: 'left' },
+                    { seat: 'T1P2', className: 'right' },
+                    { seat: 'T2P2', className: 'bottom' },
+                  ]
 
                   return (
                     <div className="table-grid">
                       <div className={`table-seat table-top${handState?.whoseTurnSeat === 'T2P1' ? ' is-turn' : ''}`}>
-                        <p className="table-seat-label">T2P1</p>
-                        <p className="table-seat-count">{countFor('T2P1')} cards</p>
-                        {bySeat.get('T2P1') ? renderCardPill(bySeat.get('T2P1')!, false) : null}
+                        <div className="table-seat-head">
+                          <p className="table-seat-label">
+                            <span className="table-seat-team-inline">Team 2</span> - {getSeatDisplayName('T2P1')}
+                          </p>
+                          <div className="table-seat-flags">
+                            {bidLabelForSeat('T2P1') ? (
+                              <span className="seat-flag bid-winner">{bidLabelForSeat('T2P1')}</span>
+                            ) : null}
+                            {bidderSeat === 'T2P1' && currentTrump ? (
+                              <span className={`seat-flag trump trump-${currentTrump}`}>
+                                Trump: {formatTrumpLabel(currentTrump)}
+                              </span>
+                            ) : null}
+                            {dealerSeat === 'T2P1' ? <span className="dealer-badge">D</span> : null}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className={`table-seat table-left${handState?.whoseTurnSeat === 'T1P2' ? ' is-turn' : ''}`}>
-                        <p className="table-seat-label">T1P2</p>
-                        <p className="table-seat-count">{countFor('T1P2')} cards</p>
-                        {bySeat.get('T1P2') ? renderCardPill(bySeat.get('T1P2')!, false) : null}
+                      <div className={`table-seat table-left${handState?.whoseTurnSeat === 'T1P1' ? ' is-turn' : ''}`}>
+                        <div className="table-seat-head">
+                          <div className="table-seat-head-left">
+                            <p className="table-seat-team">Team 1</p>
+                            <div className="table-seat-name-row">
+                              <p className="table-seat-label">{getSeatDisplayName('T1P1')}</p>
+                              {dealerSeat === 'T1P1' ? <span className="dealer-badge">D</span> : null}
+                            </div>
+                            <div className="table-seat-flags">
+                              {bidLabelForSeat('T1P1') ? (
+                                <span className="seat-flag bid-winner">{bidLabelForSeat('T1P1')}</span>
+                              ) : null}
+                              {bidderSeat === 'T1P1' && currentTrump ? (
+                                <span className={`seat-flag trump trump-${currentTrump}`}>
+                                  Trump: {formatTrumpLabel(currentTrump)}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
                       <div className="table-center">
-                        <p className="table-center-label">Trick</p>
+                        <div className="table-trick-area">
+                          {trickSpots.map((spot) => {
+                            const card = bySeat.get(spot.seat)
+                            return (
+                              <div
+                                key={spot.seat}
+                                className={`table-trick-spot ${spot.className}`}
+                                aria-label={`${spot.seat} played card`}
+                              >
+                                {!awaitingNextLead && card ? renderCardPill(card, false) : null}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {awaitingNextLead && waitingWinnerLabel ? (
+                          <p className="table-winner-banner">
+                            <span className="table-winner-title">WINNER</span>
+                            <span className="table-winner-name">{waitingWinnerLabel}</span>
+                          </p>
+                        ) : null}
                         {trickCards.length === 0 ? (
                           <p className="empty-state">No cards played yet.</p>
                         ) : null}
                       </div>
 
-                      <div className={`table-seat table-right${handState?.whoseTurnSeat === 'T2P2' ? ' is-turn' : ''}`}>
-                        <p className="table-seat-label">T2P2</p>
-                        <p className="table-seat-count">{countFor('T2P2')} cards</p>
-                        {bySeat.get('T2P2') ? renderCardPill(bySeat.get('T2P2')!, false) : null}
+                      <div className={`table-seat table-right${handState?.whoseTurnSeat === 'T1P2' ? ' is-turn' : ''}`}>
+                        <div className="table-seat-head">
+                          <div className="table-seat-head-left">
+                            <p className="table-seat-team">Team 1</p>
+                            <div className="table-seat-name-row">
+                              <p className="table-seat-label">{getSeatDisplayName('T1P2')}</p>
+                              {dealerSeat === 'T1P2' ? <span className="dealer-badge">D</span> : null}
+                            </div>
+                            <div className="table-seat-flags">
+                              {bidLabelForSeat('T1P2') ? (
+                                <span className="seat-flag bid-winner">{bidLabelForSeat('T1P2')}</span>
+                              ) : null}
+                              {bidderSeat === 'T1P2' && currentTrump ? (
+                                <span className={`seat-flag trump trump-${currentTrump}`}>
+                                  Trump: {formatTrumpLabel(currentTrump)}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className={`table-seat table-bottom${handState?.whoseTurnSeat === 'T1P1' ? ' is-turn' : ''}`}>
-                        <p className="table-seat-label">T1P1</p>
-                        <p className="table-seat-count">{countFor('T1P1')} cards</p>
-                        {bySeat.get('T1P1') ? renderCardPill(bySeat.get('T1P1')!, false) : null}
+                      <div className={`table-seat table-bottom${handState?.whoseTurnSeat === 'T2P2' ? ' is-turn' : ''}`}>
+                        <div className="table-seat-head">
+                          <p className="table-seat-label">
+                            <span className="table-seat-team-inline">Team 2</span> - {getSeatDisplayName('T2P2')}
+                          </p>
+                          <div className="table-seat-flags">
+                            {bidLabelForSeat('T2P2') ? (
+                              <span className="seat-flag bid-winner">{bidLabelForSeat('T2P2')}</span>
+                            ) : null}
+                            {bidderSeat === 'T2P2' && currentTrump ? (
+                              <span className={`seat-flag trump trump-${currentTrump}`}>
+                                Trump: {formatTrumpLabel(currentTrump)}
+                              </span>
+                            ) : null}
+                            {dealerSeat === 'T2P2' ? <span className="dealer-badge">D</span> : null}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )
                 })()}
 
-                {trickLog ? <p className="trick-log">{trickLog}</p> : null}
+                {previousTurnSummary ? (
+                  <div className="trick-result">
+                    <div className="trick-result-head">
+                      <button
+                        type="button"
+                        className="ghost trick-collapse"
+                        onClick={() => setIsPreviousTurnCollapsed((current) => !current)}
+                      >
+                        {isPreviousTurnCollapsed ? 'Show Previous Hand' : 'Hide Previous Hand'}
+                      </button>
+                    </div>
+                    {!isPreviousTurnCollapsed ? (
+                      <div className="trick-result-cards">
+                        {previousTurnSummary.plays.map((play, index) => (
+                          <div key={`${play.seat}-${index}`} className="trick-result-play">
+                            {renderCardPill(play.card, false)}
+                            <p className="trick-play-name">{play.playerName}</p>
+                            {play.isWinner ? <p className="trick-play-winner">WINNER!</p> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
-            {activePhase !== 'score' ? (
-              activePhase === 'kitty' && isBidder ? (
+            {activePhase !== 'score' && activePhase !== 'gameOver' ? (
+              activePhase === 'preDeal' ? (
+                <div className="bidding-card action-card">
+                  <p className="eyebrow">Deal Setup</p>
+                  {mySeat?.id === dealerSeat ? (
+                    <>
+                      <p className="muted">Choose the rook mode for this hand, then deal.</p>
+                      <div className="trump-options">
+                        <button
+                          type="button"
+                          className={selectedDealRookRankMode === 'rookHigh' ? 'primary' : 'ghost'}
+                          onClick={() => setSelectedDealRookRankMode('rookHigh')}
+                        >
+                          Rook High
+                        </button>
+                        <button
+                          type="button"
+                          className={selectedDealRookRankMode === 'rookLow' ? 'primary' : 'ghost'}
+                          onClick={() => setSelectedDealRookRankMode('rookLow')}
+                        >
+                          Rook Low
+                        </button>
+                      </div>
+                      <button className="primary" onClick={emitDealHand}>
+                        Deal
+                      </button>
+                    </>
+                  ) : (
+                    <p className="muted">{phaseStatus}</p>
+                  )}
+                </div>
+              ) : activePhase === 'kitty' && isBidder ? (
                 <div className="bidding-card action-card">
                   <p className="eyebrow">Kitty</p>
                   <p className="muted">The kitty has been added to your hand. Discard five cards back to the kitty.</p>
@@ -1464,10 +1946,12 @@ function App() {
                 <p className="eyebrow">Declare Trump</p>
                 <p className="muted">Choose the trump color for this hand.</p>
                 <div className="trump-options">
-                  {(Object.keys(COLOR_LABELS) as TrumpColor[]).map((color) => (
+                  {(['red', 'black', 'yellow', 'green'] as TrumpColor[]).map((color) => (
                     <button
                       key={color}
-                      className={selectedTrump === color ? 'primary' : 'ghost'}
+                      className={`trump-choice trump-${color}${
+                        selectedTrump === color ? ' is-selected' : ''
+                      }`}
                       onClick={() => setSelectedTrump(color)}
                     >
                       {COLOR_LABELS[color]}

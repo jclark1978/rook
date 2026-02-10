@@ -20,9 +20,15 @@ const io = new Server(httpServer, {
   cors: { origin: ORIGIN, credentials: true },
 });
 
-type RoomCreatePayload = { roomCode?: string; playerId?: string };
-type RoomJoinPayload = { roomCode: string; playerId?: string };
+type RoomCreatePayload = {
+  roomCode?: string;
+  playerId?: string;
+  playerName?: string;
+  targetScore?: number;
+};
+type RoomJoinPayload = { roomCode: string; playerId?: string; playerName?: string };
 type RoomSitPayload = { roomCode: string; seat: string };
+type RoomLeavePayload = { roomCode: string };
 type RoomClearSeatPayload = { roomCode: string; seat: string };
 type RoomReadyPayload = { roomCode: string; ready: boolean };
 type RoomAck =
@@ -35,11 +41,13 @@ type GameStartPayload = {
     step?: number;
     deckMode?: DeckMode;
     rookRankMode?: 'rookHigh' | 'rookLow';
+    targetScore?: number;
   };
 };
 type GameBidPayload = { roomCode: string; amount: number };
 type GamePassPayload = { roomCode: string };
 type GamePassPartnerPayload = { roomCode: string };
+type GameDealPayload = { roomCode: string; rookRankMode?: 'rookHigh' | 'rookLow' };
 type KittyPickupPayload = { roomCode: string };
 type KittyDiscardPayload = { roomCode: string; cards: Card[] };
 type TrumpDeclarePayload = { roomCode: string; trump: TrumpColor };
@@ -76,6 +84,8 @@ const toGamePublicState = (state: GameState) => ({
   dealerSeat: state.seatOrder[state.dealerIndex] ?? null,
   rookRankMode: state.rookRankMode,
   gameScores: state.scores,
+  targetScore: state.targetScore,
+  winnerTeam: state.winnerTeam,
 });
 
 const toHandPublicState = (state: GameState) => {
@@ -103,6 +113,8 @@ const toHandPublicState = (state: GameState) => {
     handPoints: state.hand.handPoints,
     biddersSet: state.hand.biddersSet,
     gameScores: state.scores,
+    targetScore: state.targetScore,
+    winnerTeam: state.winnerTeam,
     undoAvailableForSeat,
   };
 };
@@ -160,19 +172,25 @@ io.on('connection', (socket) => {
 
   socket.on(
     'room:create',
-    ({ roomCode, playerId }: RoomCreatePayload, ack?: (payload: RoomAck) => void) => {
+    (
+      { roomCode, playerId, playerName, targetScore }: RoomCreatePayload,
+      ack?: (payload: RoomAck) => void,
+    ) => {
       const resolvedPlayerId = socket.data.playerId ?? playerId ?? socket.id;
       socket.data.playerId = resolvedPlayerId;
+      if (typeof playerName === 'string' && playerName.trim()) {
+        socket.data.playerName = playerName.trim().slice(0, 24);
+      }
       const requestedCode = roomCode?.trim().toUpperCase();
 
       let result = requestedCode
-        ? rooms.createRoom(requestedCode, resolvedPlayerId)
+        ? rooms.createRoom(requestedCode, resolvedPlayerId, socket.data.playerName, targetScore)
         : { ok: false as const, error: 'room exists' };
 
       if (!requestedCode) {
         for (let attempt = 0; attempt < 12; attempt += 1) {
           const code = generateRoomCode();
-          result = rooms.createRoom(code, resolvedPlayerId);
+          result = rooms.createRoom(code, resolvedPlayerId, socket.data.playerName, targetScore);
           if (result.ok || result.error !== 'room exists') {
             break;
           }
@@ -198,9 +216,12 @@ io.on('connection', (socket) => {
 
   socket.on(
     'room:join',
-    ({ roomCode, playerId }: RoomJoinPayload, ack?: (payload: RoomAck) => void) => {
+    ({ roomCode, playerId, playerName }: RoomJoinPayload, ack?: (payload: RoomAck) => void) => {
       const resolvedPlayerId = socket.data.playerId ?? playerId ?? socket.id;
       socket.data.playerId = resolvedPlayerId;
+      if (typeof playerName === 'string' && playerName.trim()) {
+        socket.data.playerName = playerName.trim().slice(0, 24);
+      }
       const normalizedCode = roomCode.trim().toUpperCase();
 
       // Cancel any pending seat release for this player.
@@ -211,7 +232,7 @@ io.on('connection', (socket) => {
         pendingRemovals.delete(key);
       }
 
-      const result = rooms.joinRoom(normalizedCode, resolvedPlayerId);
+      const result = rooms.joinRoom(normalizedCode, resolvedPlayerId, socket.data.playerName);
       if (!result.ok) {
         socket.emit('room:error', { message: result.error });
         ack?.({ ok: false, message: result.error });
@@ -290,6 +311,19 @@ io.on('connection', (socket) => {
     io.to(normalizedCode).emit('room:state', result.value);
   });
 
+  socket.on('room:leave', ({ roomCode }: RoomLeavePayload) => {
+    const resolvedPlayerId = socket.data.playerId ?? socket.id;
+    socket.data.playerId = resolvedPlayerId;
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = rooms.leaveSeat(normalizedCode, resolvedPlayerId);
+    if (!result.ok) {
+      socket.emit('room:error', { message: result.error });
+      return;
+    }
+
+    io.to(normalizedCode).emit('room:state', result.value);
+  });
+
   socket.on('room:clearSeat', async ({ roomCode, seat }: RoomClearSeatPayload) => {
     const normalizedCode = roomCode.trim().toUpperCase();
     const roomState = rooms.getRoomState(normalizedCode);
@@ -344,7 +378,25 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const result = games.startGame(roomState, settings);
+    const result = games.startGame(roomState, {
+      ...settings,
+      targetScore: roomState.targetScore,
+    });
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    emitGameState(normalizedCode, result.value);
+    emitHandState(normalizedCode, result.value);
+    await emitPrivateHands(normalizedCode, result.value);
+  });
+
+  socket.on('game:deal', async ({ roomCode, rookRankMode }: GameDealPayload) => {
+    const resolvedPlayerId = socket.data.playerId ?? socket.id;
+    socket.data.playerId = resolvedPlayerId;
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = games.dealHand(normalizedCode, resolvedPlayerId, rookRankMode);
     if (!result.ok) {
       socket.emit('game:error', { message: result.error });
       return;
