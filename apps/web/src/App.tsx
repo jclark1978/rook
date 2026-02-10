@@ -1293,6 +1293,28 @@ function App() {
               <p className="eyebrow">{phaseTitle}</p>
               <h1>{roomCode || 'ROOM'}</h1>
               <p className="muted">{phaseStatus}</p>
+              <div className="top-meta">
+                <div>
+                  <p className="meta-label">Turn</p>
+                  <p className="meta-value">{handState?.whoseTurnSeat ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="meta-label">Bidder</p>
+                  <p className="meta-value">{bidderSeat ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="meta-label">Dealer</p>
+                  <p className="meta-value">{dealerSeat ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="meta-label">Trump</p>
+                  <p className="meta-value">{currentTrump ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="meta-label">Kitty</p>
+                  <p className="meta-value">{kittyCount ? `${kittyCount}` : '—'}</p>
+                </div>
+              </div>
             </div>
             <div className="lobby-actions">
               <button className="ghost" onClick={() => setView('lobby')}>
@@ -1354,69 +1376,11 @@ function App() {
                 </button>
               </div>
             ) : null}
-            {activePhase !== 'trick' ? (
-              <div className="bidding-card phase-card">
-                <p className="eyebrow">Phase Info</p>
-                <div className="phase-meta">
-                  <div>
-                    <p className="meta-label">Phase</p>
-                    <p className="meta-value">{phaseTitle}</p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Bidder</p>
-                    <p className="meta-value">{bidderSeat ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Dealer</p>
-                    <p className="meta-value">{dealerSeat ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Trump</p>
-                    <p className="meta-value">{currentTrump ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Kitty</p>
-                    <p className="meta-value">
-                      {kittyCount ? `${kittyCount} cards` : '—'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : null}
+            {/* Phase Info panel removed; key info now shown in the top header row. */}
 
             {activePhase === 'trick' ? (
               <div className="bidding-card trick-card">
-                <div className="trick-header">
-                  <p className="eyebrow">Trick Play</p>
-                  <p className="muted trick-status">{phaseStatus}</p>
-                </div>
-
-                <div className="phase-meta phase-meta-wide">
-                  <div>
-                    <p className="meta-label">Turn</p>
-                    <p className="meta-value">{handState?.whoseTurnSeat ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Trick</p>
-                    <p className="meta-value">{trickCards.length}/4</p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Bidder</p>
-                    <p className="meta-value">{bidderSeat ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Dealer</p>
-                    <p className="meta-value">{dealerSeat ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Trump</p>
-                    <p className="meta-value">{currentTrump ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Kitty</p>
-                    <p className="meta-value">{kittyCount ? `${kittyCount}` : '—'}</p>
-                  </div>
-                </div>
+                <p className="eyebrow">Table</p>
 
                 {(() => {
                   const bySeat = new Map<SeatId, Card>()
