@@ -155,8 +155,14 @@ const normalizeCards = (raw: unknown): Card[] => {
 const cardKey = (card: Card): string =>
   card.kind === 'rook' ? 'ROOK' : `${card.color}_${card.rank}`
 
-const cardLabel = (card: Card): string =>
-  card.kind === 'rook' ? 'ROOK' : `${COLOR_LABELS[card.color]} ${card.rank}`
+const SUIT_SYMBOL: Record<TrumpColor, string> = {
+  red: 'R',
+  black: 'B',
+  yellow: 'Y',
+  green: 'G',
+}
+
+// cardLabel retained previously; no longer used with the more realistic card layout.
 
 const sortRankValue = (card: Card, rookRankMode: 'rookHigh' | 'rookLow' = 'rookHigh'): number => {
   if (card.kind === 'rook') return rookRankMode === 'rookHigh' ? 999 : -1
@@ -781,11 +787,27 @@ function App() {
     const content =
       card.kind === 'rook' ? (
         <>
-          <img src={rookCard} alt="Rook" />
-          <span>ROOK</span>
+          <div className="card-corner">
+            <span className="card-rank">ROOK</span>
+          </div>
+          <div className="card-center">
+            <img src={rookCard} alt="Rook" className="card-rook" />
+          </div>
         </>
       ) : (
-        <span>{cardLabel(card)}</span>
+        <>
+          <div className="card-corner">
+            <span className="card-rank">{card.rank}</span>
+            <span className="card-suit">{SUIT_SYMBOL[card.color]}</span>
+          </div>
+          <div className="card-center">
+            <span className="card-suit-big">{SUIT_SYMBOL[card.color]}</span>
+          </div>
+          <div className="card-corner card-corner-bottom">
+            <span className="card-rank">{card.rank}</span>
+            <span className="card-suit">{SUIT_SYMBOL[card.color]}</span>
+          </div>
+        </>
       )
 
     if (selectable) {
@@ -1381,27 +1403,19 @@ function App() {
                     Undo Last Play
                   </button>
                 </div>
-              ) : isBidder ? (
+              ) : activePhase === 'kitty' && isBidder ? (
                 <div className="bidding-card action-card">
                   <p className="eyebrow">Kitty Actions</p>
                   <p className="muted">Pickup the kitty and discard five cards.</p>
                   <div className="postbid-actions">
-                    <button
-                      className="primary"
-                      onClick={emitPickupKitty}
-                      disabled={activePhase !== 'kitty' || !isBidder}
-                    >
+                    <button className="primary" onClick={emitPickupKitty}>
                       Pickup Kitty
                     </button>
                     <div className="discard-row">
                       <span className="discard-count">
                         {selectedDiscards.length}/5 selected
                       </span>
-                      <button
-                        className="ghost"
-                        onClick={emitDiscardKitty}
-                        disabled={activePhase !== 'kitty' || !isBidder || !canDiscard}
-                      >
+                      <button className="ghost" onClick={emitDiscardKitty} disabled={!canDiscard}>
                         Discard 5
                       </button>
                     </div>
@@ -1415,7 +1429,7 @@ function App() {
               )
             ) : null}
 
-            {activePhase !== 'score' && isBidder ? (
+            {activePhase === 'declareTrump' && isBidder ? (
               <div className="bidding-card action-card">
                 <p className="eyebrow">Declare Trump</p>
                 <p className="muted">Choose the trump color for this hand.</p>
@@ -1425,17 +1439,12 @@ function App() {
                       key={color}
                       className={selectedTrump === color ? 'primary' : 'ghost'}
                       onClick={() => setSelectedTrump(color)}
-                      disabled={activePhase !== 'declareTrump' || !isBidder}
                     >
                       {COLOR_LABELS[color]}
                     </button>
                   ))}
                 </div>
-                <button
-                  className="primary"
-                  onClick={emitDeclareTrump}
-                  disabled={activePhase !== 'declareTrump' || !isBidder}
-                >
+                <button className="primary" onClick={emitDeclareTrump}>
                   Declare Trump
                 </button>
               </div>
