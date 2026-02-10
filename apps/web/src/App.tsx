@@ -87,6 +87,7 @@ type HandPublicState = {
   handPoints?: [number, number] | null
   biddersSet?: boolean | null
   gameScores?: [number, number]
+  undoAvailableForSeat?: SeatId | null
 }
 
 type HandPrivateState = {
@@ -724,6 +725,17 @@ function App() {
     socket.emit('play:card', { roomCode, card })
   }
 
+  const emitUndoPlay = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('play:undo', { roomCode })
+  }
+
   const emitNextHand = () => {
     if (!roomCode) return
     const socket = socketRef.current
@@ -1359,7 +1371,17 @@ function App() {
             ) : null}
 
             {activePhase !== 'score' ? (
-              isBidder ? (
+              activePhase === 'trick' &&
+              mySeat?.id &&
+              handState?.undoAvailableForSeat === mySeat.id ? (
+                <div className="bidding-card action-card">
+                  <p className="eyebrow">Misclick Takeback</p>
+                  <p className="muted">You can undo your last play until the next player acts.</p>
+                  <button className="ghost" onClick={emitUndoPlay}>
+                    Undo Last Play
+                  </button>
+                </div>
+              ) : isBidder ? (
                 <div className="bidding-card action-card">
                   <p className="eyebrow">Kitty Actions</p>
                   <p className="muted">Pickup the kitty and discard five cards.</p>

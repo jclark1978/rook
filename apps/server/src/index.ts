@@ -44,6 +44,7 @@ type KittyPickupPayload = { roomCode: string };
 type KittyDiscardPayload = { roomCode: string; cards: Card[] };
 type TrumpDeclarePayload = { roomCode: string; trump: TrumpColor };
 type PlayCardPayload = { roomCode: string; card: Card };
+type PlayUndoPayload = { roomCode: string };
 type NextHandPayload = { roomCode: string };
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -77,26 +78,34 @@ const toGamePublicState = (state: GameState) => ({
   gameScores: state.scores,
 });
 
-const toHandPublicState = (state: GameState) => ({
-  roomCode: state.roomCode,
-  phase: state.phase,
-  trump: state.hand.trump,
-  rookRankMode: state.rookRankMode,
-  bidding: state.bidding,
-  winningBid: state.hand.winningBid,
-  bidderSeat: state.hand.bidder === null ? null : state.seatOrder[state.hand.bidder],
-  dealerSeat: state.seatOrder[state.dealerIndex] ?? null,
-  whoseTurnSeat: state.whoseTurnSeat,
-  handSizes: Object.fromEntries(
-    state.seatOrder.map((seat, index) => [seat, state.hand.hands[index]?.length ?? 0]),
-  ),
-  kittyCount: state.hand.kitty.length,
-  kittySize: state.hand.kittySize,
-  trickCards: state.hand.trickCards,
-  handPoints: state.hand.handPoints,
-  biddersSet: state.hand.biddersSet,
-  gameScores: state.scores,
-});
+const toHandPublicState = (state: GameState) => {
+  const undoIndex = state.hand.undoAvailableForPlayerId
+    ? state.playerOrder.indexOf(state.hand.undoAvailableForPlayerId)
+    : -1;
+  const undoAvailableForSeat = undoIndex >= 0 ? state.seatOrder[undoIndex] : null;
+
+  return {
+    roomCode: state.roomCode,
+    phase: state.phase,
+    trump: state.hand.trump,
+    rookRankMode: state.rookRankMode,
+    bidding: state.bidding,
+    winningBid: state.hand.winningBid,
+    bidderSeat: state.hand.bidder === null ? null : state.seatOrder[state.hand.bidder],
+    dealerSeat: state.seatOrder[state.dealerIndex] ?? null,
+    whoseTurnSeat: state.whoseTurnSeat,
+    handSizes: Object.fromEntries(
+      state.seatOrder.map((seat, index) => [seat, state.hand.hands[index]?.length ?? 0]),
+    ),
+    kittyCount: state.hand.kitty.length,
+    kittySize: state.hand.kittySize,
+    trickCards: state.hand.trickCards,
+    handPoints: state.hand.handPoints,
+    biddersSet: state.hand.biddersSet,
+    gameScores: state.scores,
+    undoAvailableForSeat,
+  };
+};
 
 const emitHandState = (roomCode: string, state: GameState) => {
   io.to(roomCode).emit('hand:state', toHandPublicState(state));
@@ -447,6 +456,20 @@ io.on('connection', (socket) => {
       card: cardId(card),
     });
     const result = games.playCard(normalizedCode, resolvedPlayerId, card);
+    if (!result.ok) {
+      socket.emit('game:error', { message: result.error });
+      return;
+    }
+
+    emitHandState(normalizedCode, result.value);
+    await emitPrivateHands(normalizedCode, result.value);
+  });
+
+  socket.on('play:undo', async ({ roomCode }: PlayUndoPayload) => {
+    const resolvedPlayerId = socket.data.playerId ?? socket.id;
+    socket.data.playerId = resolvedPlayerId;
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const result = games.undoPlay(normalizedCode, resolvedPlayerId);
     if (!result.ok) {
       socket.emit('game:error', { message: result.error });
       return;

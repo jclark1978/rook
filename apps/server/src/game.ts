@@ -40,6 +40,9 @@ export type HandState = {
   handPoints: [number, number] | null;
   handScores: [number, number] | null;
   biddersSet: boolean | null;
+  // Misclick takeback: if set, only this player may undo, and only until the next action.
+  undoAvailableForPlayerId: string | null;
+  undoState: GameState | null;
 };
 
 export type GameState = {
@@ -178,6 +181,8 @@ export const createGameState = (
     handPoints: null,
     handScores: null,
     biddersSet: null,
+    undoAvailableForPlayerId: null,
+    undoState: null,
   };
   const currentPlayerSeat = seatOrder[bidding.currentPlayer];
   const currentPlayerId = playerOrder[bidding.currentPlayer];
@@ -372,6 +377,8 @@ export class GameStore {
         kitty: [],
         kittyPickedUpCards: state.hand.kitty.slice(),
         kittyPickedUp: true,
+        undoAvailableForPlayerId: null,
+        undoState: null,
       },
     };
 
@@ -421,6 +428,8 @@ export class GameStore {
         kittyPickedUpCards: [],
         pointsNoticeSent: state.hand.pointsNoticeSent || pointsInKitty,
         hands,
+        undoAvailableForPlayerId: null,
+        undoState: null,
       },
     };
 
@@ -453,11 +462,42 @@ export class GameStore {
         trickCards: [],
         trickLeadColor: undefined,
         trump,
+        undoAvailableForPlayerId: null,
+        undoState: null,
       },
     };
 
     game.state = nextState;
     return { ok: true, value: nextState };
+  }
+
+  undoPlay(roomCode: string, playerId: string): GameResult<GameState> {
+    const game = this.games.get(roomCode);
+    if (!game) return { ok: false, error: 'game missing' };
+    const { state } = game;
+    if (state.phase !== 'trick') return { ok: false, error: 'trick not active' };
+
+    const undoAvailableFor = state.hand.undoAvailableForPlayerId;
+    const undoState = state.hand.undoState;
+    if (!undoAvailableFor || !undoState) {
+      return { ok: false, error: 'no undo available' };
+    }
+    if (undoAvailableFor !== playerId) {
+      return { ok: false, error: 'only the last player may undo' };
+    }
+
+    // Restore the previous state and clear undo.
+    const restored: GameState = {
+      ...undoState,
+      hand: {
+        ...undoState.hand,
+        undoAvailableForPlayerId: null,
+        undoState: null,
+      },
+    };
+
+    game.state = restored;
+    return { ok: true, value: restored };
   }
 
   playCard(roomCode: string, playerId: string, card: Card): GameResult<GameState> {
@@ -591,6 +631,16 @@ export class GameStore {
         handPoints,
         handScores,
         biddersSet,
+        // Undo is only available for the last play, until the next player acts.
+        undoAvailableForPlayerId: playerId,
+        undoState: {
+          ...state,
+          hand: {
+            ...state.hand,
+            undoAvailableForPlayerId: null,
+            undoState: null,
+          },
+        },
       },
     };
 
@@ -632,6 +682,8 @@ export class GameStore {
       handPoints: null,
       handScores: null,
       biddersSet: null,
+      undoAvailableForPlayerId: null,
+      undoState: null,
     };
     const currentPlayerSeat = state.seatOrder[bidding.currentPlayer];
     const currentPlayerId = state.playerOrder[bidding.currentPlayer];
