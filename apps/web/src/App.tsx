@@ -1451,7 +1451,7 @@ function App() {
                     </button>
                   </div>
                 </div>
-              ) : activePhase === 'trick' ? null : (
+              ) : activePhase === 'trick' ? null : activePhase === 'declareTrump' && isBidder ? null : (
                 <div className="bidding-card action-card">
                   <p className="eyebrow">Waiting</p>
                   <p className="muted">{phaseStatus}</p>
