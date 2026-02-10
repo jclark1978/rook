@@ -1354,45 +1354,67 @@ function App() {
                 </button>
               </div>
             ) : null}
-            <div className="bidding-card phase-card">
-              <p className="eyebrow">Phase Info</p>
-              <div className="phase-meta">
-                <div>
-                  <p className="meta-label">Phase</p>
-                  <p className="meta-value">{phaseTitle}</p>
-                </div>
-                <div>
-                  <p className="meta-label">Bidder</p>
-                  <p className="meta-value">{bidderSeat ?? '—'}</p>
-                </div>
-                <div>
-                  <p className="meta-label">Dealer</p>
-                  <p className="meta-value">{dealerSeat ?? '—'}</p>
-                </div>
-                <div>
-                  <p className="meta-label">Trump</p>
-                  <p className="meta-value">{currentTrump ?? '—'}</p>
-                </div>
-                <div>
-                  <p className="meta-label">Kitty</p>
-                  <p className="meta-value">
-                    {kittyCount ? `${kittyCount} cards` : '—'}
-                  </p>
+            {activePhase !== 'trick' ? (
+              <div className="bidding-card phase-card">
+                <p className="eyebrow">Phase Info</p>
+                <div className="phase-meta">
+                  <div>
+                    <p className="meta-label">Phase</p>
+                    <p className="meta-value">{phaseTitle}</p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Bidder</p>
+                    <p className="meta-value">{bidderSeat ?? '—'}</p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Dealer</p>
+                    <p className="meta-value">{dealerSeat ?? '—'}</p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Trump</p>
+                    <p className="meta-value">{currentTrump ?? '—'}</p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Kitty</p>
+                    <p className="meta-value">
+                      {kittyCount ? `${kittyCount} cards` : '—'}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : null}
 
             {activePhase === 'trick' ? (
               <div className="bidding-card trick-card">
-                <p className="eyebrow">Table</p>
-                <div className="phase-meta">
+                <div className="trick-header">
+                  <p className="eyebrow">Trick Play</p>
+                  <p className="muted trick-status">{phaseStatus}</p>
+                </div>
+
+                <div className="phase-meta phase-meta-wide">
                   <div>
-                    <p className="meta-label">Whose turn</p>
+                    <p className="meta-label">Turn</p>
                     <p className="meta-value">{handState?.whoseTurnSeat ?? '—'}</p>
                   </div>
                   <div>
-                    <p className="meta-label">Cards in trick</p>
-                    <p className="meta-value">{trickCards.length}</p>
+                    <p className="meta-label">Trick</p>
+                    <p className="meta-value">{trickCards.length}/4</p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Bidder</p>
+                    <p className="meta-value">{bidderSeat ?? '—'}</p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Dealer</p>
+                    <p className="meta-value">{dealerSeat ?? '—'}</p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Trump</p>
+                    <p className="meta-value">{currentTrump ?? '—'}</p>
+                  </div>
+                  <div>
+                    <p className="meta-label">Kitty</p>
+                    <p className="meta-value">{kittyCount ? `${kittyCount}` : '—'}</p>
                   </div>
                 </div>
 
@@ -1466,7 +1488,7 @@ function App() {
                     </button>
                   </div>
                 </div>
-              ) : (
+              ) : activePhase === 'trick' ? null : (
                 <div className="bidding-card action-card">
                   <p className="eyebrow">Waiting</p>
                   <p className="muted">{phaseStatus}</p>

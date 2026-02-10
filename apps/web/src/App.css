@@ -571,6 +571,20 @@ button.not-ready {
   border: 2px solid var(--border-strong);
 }
 
+.phase-meta-wide {
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+}
+
+.trick-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.trick-status {
+  margin: 0;
+}
+
 .postbid-actions {
   display: flex;
   flex-direction: column;
