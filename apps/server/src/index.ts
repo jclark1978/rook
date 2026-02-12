@@ -342,8 +342,13 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (!Object.prototype.hasOwnProperty.call(roomState.seats, seat)) {
+      socket.emit('room:error', { message: 'invalid seat' });
+      return;
+    }
+
     const seatKey = seat as keyof typeof roomState.seats;
-    const occupant = roomState.seats[seatKey as any] ?? null;
+    const occupant = roomState.seats[seatKey] ?? null;
     if (!occupant) {
       // already open
       return;

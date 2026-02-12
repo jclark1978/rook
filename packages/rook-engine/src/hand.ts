@@ -28,13 +28,13 @@ export type HandState = {
 
 export type PickupKittyAction = { type: 'pickupKitty'; player: PlayerId };
 export type DiscardToKittyAction = { type: 'discardToKitty'; player: PlayerId; cards: Card[] };
-export type DeclareTrumpAction = { type: 'declareTrump'; player: PlayerId; color: Color };
+export type HandDeclareTrumpAction = { type: 'declareTrump'; player: PlayerId; color: Color };
 
 export type HandAction =
   | BiddingAction
   | PickupKittyAction
   | DiscardToKittyAction
-  | DeclareTrumpAction;
+  | HandDeclareTrumpAction;
 
 export function createHandStateFromDeal(
   settings: { deckMode: DeckMode; rookRankMode: RookRankMode },

@@ -2,6 +2,7 @@ import {
   applyBiddingAction,
   createBiddingState,
   DEFAULT_MIN_BID,
+  type BiddingAction,
   type BiddingState,
   type Bid,
   getWinningBid,
@@ -347,7 +348,7 @@ export const reduceGameState = (
     throw new Error('Action must be taken by the current player.');
   }
 
-  const biddingAction =
+  const biddingAction: BiddingAction =
     action.type === 'bid'
       ? { type: 'bid', player: playerIndex, amount: action.amount }
       : action.type === 'pass'
@@ -749,7 +750,7 @@ export class GameStore {
         nextTrickCards[winnerCardIndex]?.seat ?? state.seatOrder[playerIndex];
       const winnerIndex = state.seatOrder.indexOf(winnerSeat);
       const resolvedIndex = winnerIndex === -1 ? playerIndex : winnerIndex;
-      const winningTeam = teamOf(resolvedIndex);
+      const winningTeam = teamOf(resolvedIndex as PlayerId);
       const key = teamKey(winningTeam);
       capturedByTeam[key] = [
         ...capturedByTeam[key],
