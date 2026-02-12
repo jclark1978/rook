@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { cardId, type Card } from '@rook/engine/src/cards.js';
 import type { DeckMode } from '@rook/engine/src/index.js';
 import type { TrumpColor } from '@rook/engine/src/trick.js';
@@ -14,6 +16,14 @@ const ORIGIN = process.env.CORS_ORIGIN ?? [/^http:\/\/localhost:5173$/, /^http:\
 const app = express();
 app.use(cors({ origin: ORIGIN, credentials: true }));
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+if (process.env.NODE_ENV === 'production') {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const webDistPath = path.resolve(__dirname, '../../web/dist');
+  app.use(express.static(webDistPath));
+  app.get('*', (_req, res) => res.sendFile(path.join(webDistPath, 'index.html')));
+}
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
