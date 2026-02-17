@@ -276,7 +276,9 @@ function App() {
     plays: Array<{ seat: SeatId; playerName: string; card: Card; isWinner: boolean }>
   } | null>(null)
   const [isPreviousTurnCollapsed, setIsPreviousTurnCollapsed] = useState(false)
+  const [scoresRevealed, setScoresRevealed] = useState(false)
   const socketRef = useRef<Socket | null>(null)
+  const scorePhaseRef = useRef<string | null>(null)
   const ROOM_CODE_REGEX = /^[A-Z0-9]{4}$/
 
   useEffect(() => {
@@ -352,6 +354,16 @@ function App() {
       setErrorMessage('')
     }
     const handleHandState = (state: HandPublicState) => {
+      const incomingPhase = state.phase ?? null
+      const isScorePhase = incomingPhase === 'score' || incomingPhase === 'gameOver'
+      const wasScorePhase =
+        scorePhaseRef.current === 'score' || scorePhaseRef.current === 'gameOver'
+      if (isScorePhase && !wasScorePhase) {
+        setScoresRevealed(false)
+      } else if (!isScorePhase) {
+        setScoresRevealed(false)
+      }
+      scorePhaseRef.current = incomingPhase
       setHandState(state)
       if (state.roomCode) {
         setRoomCode(state.roomCode)
@@ -393,6 +405,10 @@ function App() {
         setInfoNotice({ id: Date.now(), text: payload.text })
       }
     }
+    const handleScoreView = (_payload: { roomCode?: string }) => {
+      setScoresRevealed(true)
+      setView('hand')
+    }
 
     socket.on('connect', handleConnect)
     socket.on('disconnect', handleDisconnect)
@@ -404,6 +420,7 @@ function App() {
     socket.on('room:error', handleRoomError)
     socket.on('game:error', handleGameError)
     socket.on('info:notice', handleInfoNotice)
+    socket.on('score:view', handleScoreView)
 
     return () => {
       socket.off('connect', handleConnect)
@@ -416,6 +433,7 @@ function App() {
       socket.off('room:error', handleRoomError)
       socket.off('game:error', handleGameError)
       socket.off('info:notice', handleInfoNotice)
+      socket.off('score:view', handleScoreView)
       socket.disconnect()
     }
   }, [])
@@ -714,6 +732,8 @@ function App() {
   }, [handCards, selectedDiscards])
 
   const canDiscard = selectedDiscardCards.length === 5
+  const shouldShowScoreOverlay =
+    (activePhase === 'score' || activePhase === 'gameOver') && !scoresRevealed
 
   useEffect(() => {
     setSelectedDiscards([])
@@ -760,13 +780,17 @@ function App() {
       return 'Trick play underway.'
     }
     if (activePhase === 'score') {
-      return 'Hand complete. Review the summary below.'
+      return scoresRevealed
+        ? 'Hand complete. Review the summary below.'
+        : 'Hand complete. Waiting for scores to be revealed.'
     }
     if (activePhase === 'gameOver') {
-      return 'Target score reached. Final results below.'
+      return scoresRevealed
+        ? 'Target score reached. Final results below.'
+        : 'Target score reached. Waiting for final scores to be revealed.'
     }
     return 'Bidding in progress.'
-  }, [activePhase, isBidder, mySeat, dealerSeat])
+  }, [activePhase, isBidder, mySeat, dealerSeat, scoresRevealed])
 
   const currentTrump = useMemo((): TrumpColor | null => {
     if (!handState) return null
@@ -907,6 +931,17 @@ function App() {
     }
     setErrorMessage('')
     socket.emit('next:hand', { roomCode })
+  }
+
+  const emitViewScores = () => {
+    if (!roomCode) return
+    const socket = socketRef.current
+    if (!socket) {
+      setErrorMessage('Unable to connect to the lobby server.')
+      return
+    }
+    setErrorMessage('')
+    socket.emit('score:view', { roomCode })
   }
 
   const toggleDiscardSelection = (card: Card) => {
@@ -1625,6 +1660,20 @@ function App() {
         </main>
       ) : (
         <main className="hand">
+          {shouldShowScoreOverlay ? (
+            <div className="score-overlay" role="dialog" aria-modal="true">
+              <div className="score-overlay-modal">
+                <p className="eyebrow">Game Over</p>
+                <h2>Game Over</h2>
+                <p className="muted">Any player can reveal scores for everyone.</p>
+                <div className="entry-actions">
+                  <button className="primary" onClick={emitViewScores}>
+                    View Scores
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {errorMessage ? (
             <div className="error-banner" role="alert">
               {errorMessage}
@@ -1656,7 +1705,7 @@ function App() {
               activePhase === 'declareTrump' ? ' is-declare' : ''
             }`}
           >
-            {activePhase === 'score' || activePhase === 'gameOver' ? (
+            {(activePhase === 'score' || activePhase === 'gameOver') && scoresRevealed ? (
               <div className="bidding-card summary-card">
                 <p className="eyebrow">{activePhase === 'gameOver' ? 'Final Summary' : 'Hand Summary'}</p>
                 <div className="summary-grid">

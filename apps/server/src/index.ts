@@ -72,6 +72,7 @@ type TrumpDeclarePayload = { roomCode: string; trump: TrumpColor };
 type PlayCardPayload = { roomCode: string; card: Card };
 type PlayUndoPayload = { roomCode: string };
 type NextHandPayload = { roomCode: string };
+type ScoreViewPayload = { roomCode: string };
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_CODE_LENGTH = 4;
@@ -568,6 +569,20 @@ io.on('connection', (socket) => {
     emitGameState(normalizedCode, result.value);
     emitHandState(normalizedCode, result.value);
     await emitPrivateHands(normalizedCode, result.value);
+  });
+
+  socket.on('score:view', ({ roomCode }: ScoreViewPayload) => {
+    const normalizedCode = roomCode.trim().toUpperCase();
+    const state = games.getState(normalizedCode);
+    if (!state) {
+      socket.emit('game:error', { message: 'game missing' });
+      return;
+    }
+    if (state.phase !== 'score' && state.phase !== 'gameOver') {
+      socket.emit('game:error', { message: 'scores not ready' });
+      return;
+    }
+    io.to(normalizedCode).emit('score:view', { roomCode: normalizedCode });
   });
 
   socket.on('disconnect', () => {
