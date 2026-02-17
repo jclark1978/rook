@@ -58,6 +58,34 @@ npm run lint
 npm run typecheck
 ```
 
+## Docker
+Build and run with Docker Compose:
+
+```bash
+docker compose up --build -d
+```
+
+App endpoints:
+- Game + web: `http://localhost:3001`
+- Health: `http://localhost:3001/health`
+
+Stop:
+
+```bash
+docker compose down
+```
+
+Direct Docker build/run:
+
+```bash
+docker build -t rook-online:latest .
+docker run --rm -p 3001:3001 --name rook-online rook-online:latest
+```
+
+Optional env vars:
+- `PORT` (default `3001`)
+- `CORS_ORIGIN` (default `http://localhost:3001`; set this to your deployed origin)
+
 ## Server environment
 - `PORT` (default: `3001`)
 - `CORS_ORIGIN` (optional; defaults include local dev hosts)

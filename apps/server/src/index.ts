@@ -11,7 +11,15 @@ import { GameStore, type GameState } from './game.js';
 import { RoomStore, type RoomState } from './rooms.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
-const ORIGIN = process.env.CORS_ORIGIN ?? [/^http:\/\/localhost:5173$/, /^http:\/\/skippy\.theclarks\.home:5173$/];
+const DEFAULT_DEV_ORIGINS = [
+  /^http:\/\/localhost:5173$/,
+  /^http:\/\/127\.0\.0\.1:5173$/,
+  /^http:\/\/skippy\.theclarks\.home:5173$/,
+  /^http:\/\/(?:\d{1,3}\.){3}\d{1,3}:5173$/,
+];
+const ORIGIN = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((value) => value.trim()).filter(Boolean)
+  : DEFAULT_DEV_ORIGINS;
 
 const app = express();
 app.use(cors({ origin: ORIGIN, credentials: true }));
