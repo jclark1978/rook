@@ -1,0 +1,22 @@
+services:
+  rook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rook-online:latest
+    container_name: rook-online
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # Set to your deployed web origin when needed.
+      # Example: CORS_ORIGIN=https://rook.example.com
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health | grep -q '\"ok\":true' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "npm run -w @rook/web dev & npm run -w @rook/server dev",
     "build": "npm run -ws build",
+    "start": "node apps/server/dist/index.js",
     "test": "npm run -ws test",
     "lint": "npm run -ws lint",
     "typecheck": "npm run -ws typecheck"

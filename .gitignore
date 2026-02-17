@@ -10,3 +10,5 @@ build
 coverage
 .vite
 .cache
+packages/rook-engine/test/*.js
+packages/rook-engine/test/*.d.ts

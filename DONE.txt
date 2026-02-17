@@ -1,0 +1,15 @@
+Trick play:
+- Web: trick pile + turn display + click-to-play enabled only on your turn.
+- T19: fixed click-to-play wiring, added client/server play attempt logging, added reducer-style test ensuring played cards are removed from the correct hand.
+
+Kitty visibility update:
+- Server: stop sending kitty cards in private payloads after discard; only send picked-up kitty during kitty phase.
+- Web: hide kitty panel for bidder once phase advances past kitty.
+
+Kitty points notice:
+- Server: after kitty discard, detect whether any point cards are in kitty and broadcast `info:notice` "There are points in the kitty" (no details), once per hand.
+- Web: show notice banner/toast and auto-dismiss.
+
+T24 updates:
+- Server: track dealer, captured cards, hand scoring, and cumulative game scores; emit summary fields in hand/game state; add next-hand flow ("next:hand") to deal a new hand.
+- Web: show dealer badge on seats/seat strip, add hand summary screen (winning bid, points by team, bidders set, game score), and wire Next Hand button.
