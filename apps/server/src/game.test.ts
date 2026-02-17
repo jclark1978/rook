@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scoreHand } from '@rook/engine/src/scoring.js';
+import { scoreHand } from '@rook/engine';
 import { createGameState, GameStore, reduceGameState } from './game.js';
 import { type Seat } from './rooms.js';
 

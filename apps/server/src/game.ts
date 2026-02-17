@@ -9,13 +9,13 @@ import {
   isBiddingComplete,
   type PlayerId,
   teamOf,
-} from '@rook/engine/src/bidding.js';
-import type { Card } from '@rook/engine/src/cards.js';
-import { cardId, isPointCard } from '@rook/engine/src/cards.js';
-import type { DeckMode, RookRankMode } from '@rook/engine/src/index.js';
-import { buildDeck, deal, mulberry32, shuffle } from '@rook/engine/src/deck.js';
-import { scoreHand } from '@rook/engine/src/scoring.js';
-import { determineTrickWinner, getLegalPlays, type TrumpColor } from '@rook/engine/src/trick.js';
+} from '@rook/engine';
+import type { Card } from '@rook/engine';
+import { cardId, isPointCard } from '@rook/engine';
+import type { DeckMode, RookRankMode } from '@rook/engine';
+import { buildDeck, deal, mulberry32, shuffle } from '@rook/engine';
+import { scoreHand } from '@rook/engine';
+import { determineTrickWinner, getLegalPlays, type TrumpColor } from '@rook/engine';
 import { SEATS, type RoomState, type Seat } from './rooms.js';
 
 export type GamePhase =
