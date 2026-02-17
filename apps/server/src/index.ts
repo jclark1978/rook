@@ -4,9 +4,9 @@ import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cardId, type Card } from '@rook/engine/src/cards.js';
-import type { DeckMode } from '@rook/engine/src/index.js';
-import type { TrumpColor } from '@rook/engine/src/trick.js';
+import { cardId, type Card } from '@rook/engine';
+import type { DeckMode } from '@rook/engine';
+import type { TrumpColor } from '@rook/engine';
 import { GameStore, type GameState } from './game.js';
 import { RoomStore, type RoomState } from './rooms.js';
 
