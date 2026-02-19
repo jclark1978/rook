@@ -606,7 +606,9 @@ io.on('connection', (socket) => {
   });
 });
 
-httpServer.listen(PORT, () => {
+const HOST = process.env.HOST ?? '0.0.0.0';
+
+httpServer.listen(PORT, HOST, () => {
   // eslint-disable-next-line no-console
-  console.log(`[server] listening on http://localhost:${PORT}`);
+  console.log(`[server] listening on http://${HOST}:${PORT}`);
 });
