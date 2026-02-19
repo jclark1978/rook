@@ -21,4 +21,11 @@ describe('bidding', () => {
     expect(isBiddingComplete(state)).toBe(true);
     expect(getWinningBid(state)).toEqual({ player: 2, amount: 150 });
   });
+
+  it('rejects bids above 200', () => {
+    const state = createBiddingState(0, 100, 5);
+    expect(() =>
+      applyBiddingAction(state, { type: 'bid', player: 0, amount: 205 }),
+    ).toThrow('cannot exceed 200');
+  });
 });

@@ -9,7 +9,7 @@ export type GameSettings = {
 
 export const DEFAULT_SETTINGS: GameSettings = {
   targetScore: 700,
-  deckMode: 'full',
+  deckMode: 'fast',
   rookRankMode: 'rookHigh',
 };
 

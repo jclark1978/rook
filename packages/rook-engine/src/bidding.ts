@@ -19,6 +19,7 @@ export type BiddingState = {
 };
 
 export const DEFAULT_MIN_BID = 100;
+export const DEFAULT_MAX_BID = 200;
 export const DEFAULT_BID_STEP = 5;
 
 const PLAYERS: PlayerId[] = [0, 1, 2, 3];
@@ -85,6 +86,9 @@ function applyBid(state: BiddingState, action: BidAction): BiddingState {
   const { amount } = action;
   if (amount < state.minBid) {
     throw new Error(`Bid must be at least ${state.minBid}.`);
+  }
+  if (amount > DEFAULT_MAX_BID) {
+    throw new Error(`Bid cannot exceed ${DEFAULT_MAX_BID}.`);
   }
   if (amount % state.step !== 0) {
     throw new Error(`Bid must be in increments of ${state.step}.`);

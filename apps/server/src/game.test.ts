@@ -44,6 +44,7 @@ describe('Game reducer', () => {
     if (!started.ok) return;
     expect(started.value.phase).toBe('preDeal');
     expect(started.value.whoseTurnPlayerId).toBe('player-a');
+    expect(started.value.hand.deckMode).toBe('fast');
 
     const nonDealerDeal = store.dealHand('ROOMX', 'player-b', 'rookLow');
     expect(nonDealerDeal.ok).toBe(false);
@@ -56,8 +57,45 @@ describe('Game reducer', () => {
     if (!dealerDeal.ok) return;
     expect(dealerDeal.value.phase).toBe('bidding');
     expect(dealerDeal.value.rookRankMode).toBe('rookLow');
-    expect(dealerDeal.value.hand.hands[0].length).toBeGreaterThan(0);
+    expect(dealerDeal.value.hand.hands[0].length).toBe(10);
     expect(dealerDeal.value.hand.kitty.length).toBe(5);
+  });
+
+  it('can include low cards when dealer chooses full deck', () => {
+    const store = new GameStore();
+    const started = store.startGame(createRoomState());
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const dealerDeal = store.dealHand('ROOMX', 'player-a', 'rookHigh', 'full');
+    expect(dealerDeal.ok).toBe(true);
+    if (!dealerDeal.ok) return;
+
+    expect(dealerDeal.value.hand.deckMode).toBe('full');
+    expect(dealerDeal.value.hand.hands[0].length).toBe(13);
+    expect(dealerDeal.value.hand.kitty.length).toBe(5);
+  });
+
+  it('removes all 2/3/4 cards when dealing fast deck', () => {
+    const store = new GameStore();
+    const started = store.startGame(createRoomState());
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const dealerDeal = store.dealHand('ROOMX', 'player-a', 'rookHigh', 'fast');
+    expect(dealerDeal.ok).toBe(true);
+    if (!dealerDeal.ok) return;
+
+    const allCards = [
+      ...dealerDeal.value.hand.hands.flat(),
+      ...dealerDeal.value.hand.kitty,
+    ];
+    const lowCards = allCards.filter(
+      (card) => card.kind === 'suit' && (card.rank === 2 || card.rank === 3 || card.rank === 4),
+    );
+
+    expect(lowCards.length).toBe(0);
+    expect(dealerDeal.value.hand.hands[0].length).toBe(10);
   });
 
   it('advances turn after bid and pass', () => {

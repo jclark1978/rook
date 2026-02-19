@@ -65,7 +65,12 @@ type GameStartPayload = {
 type GameBidPayload = { roomCode: string; amount: number };
 type GamePassPayload = { roomCode: string };
 type GamePassPartnerPayload = { roomCode: string };
-type GameDealPayload = { roomCode: string; rookRankMode?: 'rookHigh' | 'rookLow' };
+type GameDealPayload = {
+  roomCode: string;
+  rookRankMode?: 'rookHigh' | 'rookLow';
+  includeLowCards?: boolean;
+  deckMode?: DeckMode;
+};
 type KittyPickupPayload = { roomCode: string };
 type KittyDiscardPayload = { roomCode: string; cards: Card[] };
 type TrumpDeclarePayload = { roomCode: string; trump: TrumpColor };
@@ -102,6 +107,7 @@ const toGamePublicState = (state: GameState) => ({
   whoseTurnPlayerId: state.whoseTurnPlayerId,
   dealerSeat: state.seatOrder[state.dealerIndex] ?? null,
   rookRankMode: state.rookRankMode,
+  deckMode: state.hand.deckMode,
   gameScores: state.scores,
   targetScore: state.targetScore,
   winnerTeam: state.winnerTeam,
@@ -123,6 +129,7 @@ const toHandPublicState = (state: GameState) => {
     bidderSeat: state.hand.bidder === null ? null : state.seatOrder[state.hand.bidder],
     dealerSeat: state.seatOrder[state.dealerIndex] ?? null,
     whoseTurnSeat: state.whoseTurnSeat,
+    deckMode: state.hand.deckMode,
     handSizes: Object.fromEntries(
       state.seatOrder.map((seat, index) => [seat, state.hand.hands[index]?.length ?? 0]),
     ),
@@ -416,11 +423,20 @@ io.on('connection', (socket) => {
     await emitPrivateHands(normalizedCode, result.value);
   });
 
-  socket.on('game:deal', async ({ roomCode, rookRankMode }: GameDealPayload) => {
+  socket.on('game:deal', async ({ roomCode, rookRankMode, includeLowCards, deckMode }: GameDealPayload) => {
     const resolvedPlayerId = socket.data.playerId ?? socket.id;
     socket.data.playerId = resolvedPlayerId;
     const normalizedCode = roomCode.trim().toUpperCase();
-    const result = games.dealHand(normalizedCode, resolvedPlayerId, rookRankMode);
+    const deckModeFromToggle: DeckMode | undefined =
+      typeof includeLowCards === 'boolean'
+        ? includeLowCards
+          ? 'full'
+          : 'fast'
+        : undefined;
+    const deckModeFromPayload: DeckMode | undefined =
+      deckMode === 'full' || deckMode === 'fast' ? deckMode : undefined;
+    const resolvedDeckMode: DeckMode | undefined = deckModeFromToggle ?? deckModeFromPayload;
+    const result = games.dealHand(normalizedCode, resolvedPlayerId, rookRankMode, resolvedDeckMode);
     if (!result.ok) {
       socket.emit('game:error', { message: result.error });
       return;

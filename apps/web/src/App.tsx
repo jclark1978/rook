@@ -53,6 +53,7 @@ type BiddingHistoryEntry = {
 }
 
 type TrumpColor = 'red' | 'yellow' | 'green' | 'black'
+type DeckMode = 'full' | 'fast'
 
 type Card =
   | { kind: 'suit'; color: TrumpColor; rank: number }
@@ -83,6 +84,7 @@ type GameState = {
   passPartnerUsed?: [boolean, boolean]
   dealerSeat?: SeatId | null
   rookRankMode?: RookRankMode
+  deckMode?: DeckMode
   gameScores?: [number, number]
   targetScore?: number
   winnerTeam?: 0 | 1 | null
@@ -96,6 +98,7 @@ type HandPublicState = {
   dealerSeat?: SeatId | null
   trump?: string | null
   rookRankMode?: RookRankMode
+  deckMode?: DeckMode
   kittyCount?: number
   whoseTurnSeat?: SeatId | null
   handSizes?: Record<string, number>
@@ -248,6 +251,7 @@ function App() {
   const [playerHandle, setPlayerHandle] = useState('')
   const [entryTargetScore, setEntryTargetScore] = useState('700')
   const [entryMode, setEntryMode] = useState<'create' | 'join' | null>(null)
+  const entryModeRef = useRef<'create' | 'join' | null>(null)
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>('connecting')
   const [roomState, setRoomState] = useState<RoomState | null>(null)
@@ -257,11 +261,13 @@ function App() {
   const [playerId, setPlayerId] = useState('')
   const stablePlayerIdRef = useRef<string>('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [entryErrorMessage, setEntryErrorMessage] = useState('')
   const [customBid, setCustomBid] = useState('')
   const [selectedDiscards, setSelectedDiscards] = useState<string[]>([])
   const [selectedTrump, setSelectedTrump] = useState<TrumpColor>('red')
   const [selectedDealRookRankMode, setSelectedDealRookRankMode] =
     useState<RookRankMode>('rookHigh')
+  const [selectedDealIncludeLowCards, setSelectedDealIncludeLowCards] = useState(false)
   const [infoNotice, setInfoNotice] = useState<{
     id: number
     text: string
@@ -280,6 +286,10 @@ function App() {
   const socketRef = useRef<Socket | null>(null)
   const scorePhaseRef = useRef<string | null>(null)
   const ROOM_CODE_REGEX = /^[A-Z0-9]{4}$/
+
+  useEffect(() => {
+    entryModeRef.current = entryMode
+  }, [entryMode])
 
   useEffect(() => {
     // If you open the web UI from another device, `localhost` would point at *that* device.
@@ -344,6 +354,7 @@ function App() {
       setRoomCode(state.roomCode)
       setView((current) => (current === 'home' ? 'lobby' : current))
       setErrorMessage('')
+      setEntryErrorMessage('')
     }
     const handleGameState = (state: GameState) => {
       setGameState(state)
@@ -385,7 +396,12 @@ function App() {
     }
     const handleRoomError = (payload: { message?: string }) => {
       if (payload?.message) {
-        setErrorMessage(payload.message)
+        const friendlyMessage = toFriendlyRoomMessage(payload.message)
+        if (entryModeRef.current) {
+          setEntryErrorMessage(friendlyMessage)
+        } else {
+          setErrorMessage(friendlyMessage)
+        }
       }
     }
     const handleGameError = (payload: { message?: string }) => {
@@ -461,6 +477,13 @@ function App() {
     return 'Disconnected'
   }, [connectionStatus])
 
+  const toFriendlyRoomMessage = (message: string) => {
+    if (message.trim().toLowerCase() === 'room exists') {
+      return 'Game ID already in use.'
+    }
+    return message
+  }
+
   const handleCreateRoom = (
     requestedCode?: string,
     requestedName?: string,
@@ -468,19 +491,20 @@ function App() {
   ) => {
     const socket = socketRef.current
     if (!socket) {
-      setErrorMessage('Unable to connect to the lobby server.')
+      setEntryErrorMessage('Unable to connect to the lobby server.')
       return
     }
     const trimmedName = requestedName?.trim()
     if (!trimmedName) {
-      setErrorMessage('Enter your name before creating a room.')
+      setEntryErrorMessage('Enter your name before creating a room.')
       return
     }
     const trimmedCode = requestedCode?.trim().toUpperCase()
     if (trimmedCode && !ROOM_CODE_REGEX.test(trimmedCode)) {
-      setErrorMessage('Game ID must be 4 characters.')
+      setEntryErrorMessage('Game ID must be 4 characters.')
       return
     }
+    setEntryErrorMessage('')
     setErrorMessage('')
     socket.emit(
       'room:create',
@@ -498,8 +522,9 @@ function App() {
           setView('lobby')
           setEntryMode(null)
           setEntryGameId('')
+          setEntryErrorMessage('')
         } else if (response?.message) {
-          setErrorMessage(response.message)
+          setEntryErrorMessage(toFriendlyRoomMessage(response.message))
         }
       },
     )
@@ -509,18 +534,19 @@ function App() {
     const trimmed = requestedCode.trim().toUpperCase()
     const trimmedName = requestedName.trim()
     if (!ROOM_CODE_REGEX.test(trimmed)) {
-      setErrorMessage('Game ID must be 4 characters.')
+      setEntryErrorMessage('Game ID must be 4 characters.')
       return
     }
     if (!trimmedName) {
-      setErrorMessage('Enter your name before joining.')
+      setEntryErrorMessage('Enter your name before joining.')
       return
     }
     const socket = socketRef.current
     if (!socket) {
-      setErrorMessage('Unable to connect to the lobby server.')
+      setEntryErrorMessage('Unable to connect to the lobby server.')
       return
     }
+    setEntryErrorMessage('')
     setErrorMessage('')
     socket.emit(
       'room:join',
@@ -537,8 +563,9 @@ function App() {
         setView('lobby')
         setEntryMode(null)
         setEntryGameId('')
+        setEntryErrorMessage('')
       } else if (response?.message) {
-        setErrorMessage(response.message)
+        setEntryErrorMessage(toFriendlyRoomMessage(response.message))
       }
     })
   }
@@ -573,7 +600,12 @@ function App() {
       return
     }
     setErrorMessage('')
-    socket.emit('game:deal', { roomCode, rookRankMode: selectedDealRookRankMode })
+    socket.emit('game:deal', {
+      roomCode,
+      rookRankMode: selectedDealRookRankMode,
+      includeLowCards: selectedDealIncludeLowCards,
+      deckMode: selectedDealIncludeLowCards ? 'full' : 'fast',
+    })
   }
 
   const handleCopyRoomCode = async () => {
@@ -635,10 +667,11 @@ function App() {
   }, [gameState])
 
   const minBid = biddingState?.minBid ?? 100
+  const maxBid = 200
   const bidStep = biddingState?.step ?? 5
   const highBidAmount = biddingState?.highBid?.amount ?? 0
   const bidIncrement = Math.max(bidStep, 5)
-  const quickBidAmount = Math.max(minBid, highBidAmount + bidIncrement)
+  const quickBidAmount = Math.min(maxBid, Math.max(minBid, highBidAmount + bidIncrement))
 
   const mySeat = useMemo(
     () => seats.find((seat) => roomState?.seats?.[seat.id] === playerId),
@@ -673,13 +706,6 @@ function App() {
     (biddingState?.highBid
       ? seatOrder[biddingState.highBid.player]
       : null)
-
-  const bidderPartnerSeat = useMemo(() => {
-    if (!bidderSeat) return null
-    const bidderIndex = seatOrder.indexOf(bidderSeat)
-    if (bidderIndex < 0) return null
-    return seatOrder[(bidderIndex + 2) % 4] ?? null
-  }, [bidderSeat])
 
   const isBidder = Boolean(mySeat && bidderSeat === mySeat.id)
 
@@ -763,7 +789,7 @@ function App() {
   const phaseStatus = useMemo(() => {
     if (activePhase === 'preDeal') {
       return mySeat?.id === dealerSeat
-        ? 'Choose Rook High/Low and press Deal to start bidding.'
+        ? 'Choose Rook High/Low and whether to include 2/3/4, then press Deal.'
         : 'Waiting for dealer to choose rules and deal.'
     }
     if (activePhase === 'kitty') {
@@ -805,14 +831,18 @@ function App() {
 
   const rookRankMode: RookRankMode =
     handState?.rookRankMode ?? gameState?.rookRankMode ?? 'rookHigh'
+  const deckMode: DeckMode = handState?.deckMode ?? gameState?.deckMode ?? 'fast'
   const targetScore =
     handState?.targetScore ?? gameState?.targetScore ?? roomState?.targetScore ?? 700
-  const houseRuleLabel = rookRankMode === 'rookLow' ? 'Rook Low' : 'Rook High'
+  const houseRuleLabel = `${rookRankMode === 'rookLow' ? 'Rook Low' : 'Rook High'} · ${
+    deckMode === 'full' ? '2/3/4 Included' : '2/3/4 Removed'
+  }`
 
   useEffect(() => {
     if (activePhase !== 'preDeal') return
     setSelectedDealRookRankMode(rookRankMode)
-  }, [activePhase, rookRankMode])
+    setSelectedDealIncludeLowCards(deckMode === 'full')
+  }, [activePhase, rookRankMode, deckMode])
 
   const gameScores = handState?.gameScores ?? gameState?.gameScores ?? null
   const gameWinnerTeam = handState?.winnerTeam ?? gameState?.winnerTeam ?? null
@@ -958,8 +988,16 @@ function App() {
   const handleCustomBid = () => {
     const amount = Number(customBid)
     if (!Number.isFinite(amount)) return
+    if (amount > maxBid) return
     emitBid(amount)
   }
+
+  const customBidAmount = Number(customBid)
+  const isCustomBidValid =
+    Number.isFinite(customBidAmount) &&
+    customBidAmount >= minBid &&
+    customBidAmount <= maxBid &&
+    customBidAmount % bidStep === 0
 
   const renderCardPill = (
     card: Card,
@@ -1127,18 +1165,42 @@ function App() {
 
   const winningBidAmount = handState?.winningBid?.amount ?? biddingState?.highBid?.amount ?? null
   const bidLabelForSeat = (seat: SeatId) => {
-    if (seat === bidderSeat) {
-      return winningBidAmount ? `★ Bid: ${winningBidAmount}` : '★ Bid'
-    }
-    if (seat === bidderPartnerSeat) {
-      return winningBidAmount ? `Bid: ${winningBidAmount}` : 'Bid'
-    }
-    return null
+    if (seat !== bidderSeat) return null
+    return winningBidAmount ? `★ Bid ${winningBidAmount}` : '★ Bid'
   }
 
-  const getTeamSeatLabel = (seatId: SeatId) => {
-    const teamNumber = seatId.startsWith('T1') ? '1' : '2'
-    return `Team ${teamNumber}: ${getSeatDisplayName(seatId)}`
+  const renderTrickSeat = (seat: SeatId, positionClass: string) => {
+    const isTurn = handState?.whoseTurnSeat === seat
+    const bidLabel = bidLabelForSeat(seat)
+    const isTrumpSeat = bidderSeat === seat && currentTrump
+    const hasSeatMeta = Boolean(bidLabel || isTrumpSeat)
+
+    const isPortraitCompact =
+      typeof window !== 'undefined'
+        ? window.matchMedia('(max-width: 900px) and (orientation: portrait)').matches
+        : false
+
+    return (
+      <div className={`table-seat ${positionClass}${isTurn ? ' is-turn' : ''}`}>
+        <details className="table-seat-details" open={isPortraitCompact ? undefined : true}>
+          <summary className="table-seat-summary">
+            <span className="table-seat-name">{getSeatDisplayName(seat)}</span>
+          </summary>
+          {hasSeatMeta ? (
+            <div className="table-seat-meta">
+              <div className="table-seat-flags">
+                {bidLabel ? <span className="seat-flag bid-winner winning-bid">{bidLabel}</span> : null}
+                {isTrumpSeat ? (
+                  <span className={`seat-flag trump trump-${currentTrump}`}>
+                    Trump: {formatTrumpLabel(currentTrump)}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </details>
+      </div>
+    )
   }
 
   useEffect(() => {
@@ -1166,8 +1228,42 @@ function App() {
     setIsPreviousTurnCollapsed(false)
   }, [activePhase, trickPlays, handState, roomState, playerId])
 
+  useEffect(() => {
+    if (activePhase !== 'trick') return
+    if (!previousTurnSummary) return
+    // Once the next trick starts (first card played), collapse prior trick details.
+    if (trickPlays.length > 0 && trickPlays.length < 4) {
+      setIsPreviousTurnCollapsed(true)
+    }
+  }, [activePhase, trickPlays.length, previousTurnSummary])
+
   const renderSeatStrip = () => {
     const allowSeatPick = Boolean(roomState) && !mySeat
+    const biddingIndicatorForSeat = (
+      seatId: SeatId,
+    ): { label: string; variant: 'bidding' | 'bid' | 'pass' | 'pass-partner' } | null => {
+      if (activePhase !== 'bidding') return null
+      if (currentPlayerSeat === seatId) {
+        return { label: 'Bidding', variant: 'bidding' }
+      }
+      const seatIndex = seatOrder.indexOf(seatId)
+      if (seatIndex < 0) return null
+      const history = biddingState?.history ?? []
+      for (let index = history.length - 1; index >= 0; index -= 1) {
+        const entry = history[index]
+        if (entry.player !== seatIndex) continue
+        if (entry.type === 'bid') {
+          return { label: `Bid ${entry.amount ?? ''}`.trim(), variant: 'bid' }
+        }
+        if (entry.type === 'pass') {
+          return { label: 'Pass', variant: 'pass' }
+        }
+        if (entry.type === 'passPartner') {
+          return { label: 'Pass Partner', variant: 'pass-partner' }
+        }
+      }
+      return null
+    }
 
     return (
       <div className="seat-strip" aria-label="Table seats">
@@ -1177,16 +1273,23 @@ function App() {
           const isOpen = !owner
           const isDealer = dealerSeat === seat.id
           const isTurnSeat = activePhase === 'trick' && handState?.whoseTurnSeat === seat.id
+          const isBiddingTurnSeat = activePhase === 'bidding' && currentPlayerSeat === seat.id
+          const seatBidLabel = bidLabelForSeat(seat.id)
+          const biddingIndicator = biddingIndicatorForSeat(seat.id)
           const className = `seat-pill${isMine ? ' is-mine' : ''}${
             allowSeatPick && isOpen ? ' is-clickable' : ''
-          }`
+          }${isBiddingTurnSeat ? ' is-bidding-turn' : ''}`
 
           const content = (
             <>
               <div className="seat-pill-head">
                 {!isOpen && !isMine ? (
                   <details className="seat-pill-menu">
-                    <summary className="seat-pill-name seat-pill-name-button">
+                    <summary
+                      className={`seat-pill-name seat-pill-name-button${
+                        isBiddingTurnSeat ? ' is-bidding-turn-name' : ''
+                      }`}
+                    >
                       {getSeatDisplayName(seat.id)}
                     </summary>
                     <div className="seat-pill-menu-popover">
@@ -1209,17 +1312,28 @@ function App() {
                     </div>
                   </details>
                 ) : (
-                  <span className="seat-pill-name">{getSeatDisplayName(seat.id)}</span>
+                  <span
+                    className={`seat-pill-name${
+                      isBiddingTurnSeat ? ' is-bidding-turn-name' : ''
+                    }`}
+                  >
+                    {getSeatDisplayName(seat.id)}
+                  </span>
                 )}
                 <div className="seat-pill-flags">
+                  {biddingIndicator ? (
+                    <span className={`seat-flag bidding-indicator ${biddingIndicator.variant}`}>
+                      {biddingIndicator.label}
+                    </span>
+                  ) : null}
+                  {!biddingIndicator && activePhase !== 'bidding' && seatBidLabel ? (
+                    <span className="seat-flag bid-winner winning-bid">{seatBidLabel}</span>
+                  ) : null}
                   {isTurnSeat ? <span className="seat-flag turn">Turn</span> : null}
                   {isDealer ? <span className="dealer-badge">D</span> : null}
                 </div>
               </div>
               {isOpen ? <span className="seat-status">OPEN</span> : null}
-              {activePhase === 'trick' && bidLabelForSeat(seat.id) ? (
-                <span className="seat-flag bid-winner">{bidLabelForSeat(seat.id)}</span>
-              ) : null}
               {activePhase === 'trick' && bidderSeat === seat.id && currentTrump ? (
                 <span className={`seat-flag trump trump-${currentTrump}`}>
                   Trump: {formatTrumpLabel(currentTrump)}
@@ -1266,11 +1380,13 @@ function App() {
   const openEntryModal = (mode: 'create' | 'join') => {
     setEntryMode(mode)
     setErrorMessage('')
+    setEntryErrorMessage('')
   }
 
   const closeEntryModal = () => {
     setEntryMode(null)
     setErrorMessage('')
+    setEntryErrorMessage('')
   }
 
   const submitEntry = () => {
@@ -1337,12 +1453,20 @@ function App() {
             <p className="muted">
               Set your handle and game key before entering the lobby.
             </p>
+            {entryErrorMessage ? (
+              <div className="error-banner" role="alert">
+                {entryErrorMessage}
+              </div>
+            ) : null}
             <div className="entry-form">
               <label htmlFor="entry-game-id" className="meta-label">Game ID</label>
               <input
                 id="entry-game-id"
                 value={entryGameId}
-                onChange={(event) => setEntryGameId(event.target.value.toUpperCase())}
+                onChange={(event) => {
+                  setEntryGameId(event.target.value.toUpperCase())
+                  if (entryErrorMessage) setEntryErrorMessage('')
+                }}
                 placeholder={entryMode === 'join' ? 'AB12' : 'Optional (AB12)'}
                 maxLength={4}
                 className="entry-code-input"
@@ -1351,7 +1475,10 @@ function App() {
               <input
                 id="entry-player-name"
                 value={playerHandle}
-                onChange={(event) => setPlayerHandle(event.target.value)}
+                onChange={(event) => {
+                  setPlayerHandle(event.target.value)
+                  if (entryErrorMessage) setEntryErrorMessage('')
+                }}
                 placeholder="Your handle"
                 maxLength={24}
               />
@@ -1365,7 +1492,10 @@ function App() {
                     max={2000}
                     step={5}
                     value={entryTargetScore}
-                    onChange={(event) => setEntryTargetScore(event.target.value)}
+                    onChange={(event) => {
+                      setEntryTargetScore(event.target.value)
+                      if (entryErrorMessage) setEntryErrorMessage('')
+                    }}
                     placeholder="700"
                   />
                 </>
@@ -1476,7 +1606,6 @@ function App() {
                     {team.seats.map((seatId) => {
                       const seatOwner = roomState?.seats[seatId] ?? null
                       const isMine = seatOwner === playerId
-                      const isDealer = dealerSeat === seatId
 
                       return (
                         <article
@@ -1489,7 +1618,6 @@ function App() {
                                 ? 'You'
                                 : getOpenSeatPlaceholder(seatId)}
                             </p>
-                            {isDealer ? <span className="dealer-badge">D</span> : null}
                           </div>
                           <p className="seat-team">
                             {seatOwner ? getPlayerName(seatOwner) : 'Open Seat'}
@@ -1575,7 +1703,7 @@ function App() {
                 <button
                   className="primary"
                   onClick={() => emitBid(quickBidAmount)}
-                  disabled={!isMyTurn}
+                  disabled={!isMyTurn || quickBidAmount > maxBid}
                 >
                   Bid +{bidIncrement} ({quickBidAmount})
                 </button>
@@ -1583,15 +1711,16 @@ function App() {
                   <input
                     type="number"
                     min={minBid}
+                    max={maxBid}
                     step={bidStep}
                     value={customBid}
                     onChange={(event) => setCustomBid(event.target.value)}
-                    placeholder={`Custom (min ${minBid})`}
+                    placeholder={`Custom (${minBid}-${maxBid})`}
                   />
                   <button
                     className="ghost"
                     onClick={handleCustomBid}
-                    disabled={!isMyTurn || !customBid}
+                    disabled={!isMyTurn || !isCustomBidValid}
                   >
                     Bid
                   </button>
@@ -1697,6 +1826,9 @@ function App() {
             </div>
           </section>
           {renderSeatStrip()}
+          {(activePhase === 'kitty' || activePhase === 'declareTrump') && !isBidder ? (
+            <p className="phase-inline-message">{phaseStatus}</p>
+          ) : null}
 
           <section
             className={`postbid-grid${activePhase === 'trick' ? ' is-trick' : ''}${
@@ -1778,7 +1910,7 @@ function App() {
             ) : null}
             {/* Phase Info panel removed; key info now shown in the top header row. */}
 
-            {activePhase === 'trick' ? (
+            {activePhase === 'trick' || activePhase === 'kitty' || activePhase === 'declareTrump' ? (
               <div className="bidding-card trick-card">
                 <p className="eyebrow">Table</p>
 
@@ -1793,7 +1925,7 @@ function App() {
                     handState?.whoseTurnSeat ??
                     null
                   const waitingWinnerLabel = waitingWinnerSeat
-                    ? getTeamSeatLabel(waitingWinnerSeat)
+                    ? getSeatDisplayName(waitingWinnerSeat)
                     : null
                   const trickSpots: Array<{ seat: SeatId; className: string }> = [
                     { seat: 'T2P1', className: 'top' },
@@ -1804,48 +1936,14 @@ function App() {
 
                   return (
                     <div className="table-grid">
-                      <div className={`table-seat table-top${handState?.whoseTurnSeat === 'T2P1' ? ' is-turn' : ''}`}>
-                        <div className="table-seat-head">
-                          <p className="table-seat-label">
-                            <span className="table-seat-team-inline">Team 2</span> - {getSeatDisplayName('T2P1')}
-                          </p>
-                          <div className="table-seat-flags">
-                            {bidLabelForSeat('T2P1') ? (
-                              <span className="seat-flag bid-winner">{bidLabelForSeat('T2P1')}</span>
-                            ) : null}
-                            {bidderSeat === 'T2P1' && currentTrump ? (
-                              <span className={`seat-flag trump trump-${currentTrump}`}>
-                                Trump: {formatTrumpLabel(currentTrump)}
-                              </span>
-                            ) : null}
-                            {dealerSeat === 'T2P1' ? <span className="dealer-badge">D</span> : null}
-                          </div>
-                        </div>
-                      </div>
+                      {renderTrickSeat('T2P1', 'table-top')}
+                      {renderTrickSeat('T1P1', 'table-left')}
 
-                      <div className={`table-seat table-left${handState?.whoseTurnSeat === 'T1P1' ? ' is-turn' : ''}`}>
-                        <div className="table-seat-head">
-                          <div className="table-seat-head-left">
-                            <p className="table-seat-team">Team 1</p>
-                            <div className="table-seat-name-row">
-                              <p className="table-seat-label">{getSeatDisplayName('T1P1')}</p>
-                              {dealerSeat === 'T1P1' ? <span className="dealer-badge">D</span> : null}
-                            </div>
-                            <div className="table-seat-flags">
-                              {bidLabelForSeat('T1P1') ? (
-                                <span className="seat-flag bid-winner">{bidLabelForSeat('T1P1')}</span>
-                              ) : null}
-                              {bidderSeat === 'T1P1' && currentTrump ? (
-                                <span className={`seat-flag trump trump-${currentTrump}`}>
-                                  Trump: {formatTrumpLabel(currentTrump)}
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="table-center">
+                      <div
+                        className={`table-center${
+                          currentTrump ? ` table-trump-${currentTrump}` : ''
+                        }`}
+                      >
                         <div className="table-trick-area">
                           {trickSpots.map((spot) => {
                             const card = bySeat.get(spot.seat)
@@ -1871,46 +1969,8 @@ function App() {
                         ) : null}
                       </div>
 
-                      <div className={`table-seat table-right${handState?.whoseTurnSeat === 'T1P2' ? ' is-turn' : ''}`}>
-                        <div className="table-seat-head">
-                          <div className="table-seat-head-left">
-                            <p className="table-seat-team">Team 1</p>
-                            <div className="table-seat-name-row">
-                              <p className="table-seat-label">{getSeatDisplayName('T1P2')}</p>
-                              {dealerSeat === 'T1P2' ? <span className="dealer-badge">D</span> : null}
-                            </div>
-                            <div className="table-seat-flags">
-                              {bidLabelForSeat('T1P2') ? (
-                                <span className="seat-flag bid-winner">{bidLabelForSeat('T1P2')}</span>
-                              ) : null}
-                              {bidderSeat === 'T1P2' && currentTrump ? (
-                                <span className={`seat-flag trump trump-${currentTrump}`}>
-                                  Trump: {formatTrumpLabel(currentTrump)}
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className={`table-seat table-bottom${handState?.whoseTurnSeat === 'T2P2' ? ' is-turn' : ''}`}>
-                        <div className="table-seat-head">
-                          <p className="table-seat-label">
-                            <span className="table-seat-team-inline">Team 2</span> - {getSeatDisplayName('T2P2')}
-                          </p>
-                          <div className="table-seat-flags">
-                            {bidLabelForSeat('T2P2') ? (
-                              <span className="seat-flag bid-winner">{bidLabelForSeat('T2P2')}</span>
-                            ) : null}
-                            {bidderSeat === 'T2P2' && currentTrump ? (
-                              <span className={`seat-flag trump trump-${currentTrump}`}>
-                                Trump: {formatTrumpLabel(currentTrump)}
-                              </span>
-                            ) : null}
-                            {dealerSeat === 'T2P2' ? <span className="dealer-badge">D</span> : null}
-                          </div>
-                        </div>
-                      </div>
+                      {renderTrickSeat('T1P2', 'table-right')}
+                      {renderTrickSeat('T2P2', 'table-bottom')}
                     </div>
                   )
                 })()}
@@ -1948,7 +2008,9 @@ function App() {
                   <p className="eyebrow">Deal Setup</p>
                   {mySeat?.id === dealerSeat ? (
                     <>
-                      <p className="muted">Choose the rook mode for this hand, then deal.</p>
+                      <p className="muted">
+                        Choose rook mode and whether to include 2/3/4 cards, then deal.
+                      </p>
                       <div className="trump-options">
                         <button
                           type="button"
@@ -1965,6 +2027,22 @@ function App() {
                           Rook Low
                         </button>
                       </div>
+                      <div className="trump-options">
+                        <button
+                          type="button"
+                          className={selectedDealIncludeLowCards ? 'primary' : 'ghost'}
+                          onClick={() => setSelectedDealIncludeLowCards(true)}
+                        >
+                          Include 2/3/4
+                        </button>
+                        <button
+                          type="button"
+                          className={!selectedDealIncludeLowCards ? 'primary' : 'ghost'}
+                          onClick={() => setSelectedDealIncludeLowCards(false)}
+                        >
+                          Remove 2/3/4
+                        </button>
+                      </div>
                       <button className="primary" onClick={emitDealHand}>
                         Deal
                       </button>
@@ -1973,46 +2051,12 @@ function App() {
                     <p className="muted">{phaseStatus}</p>
                   )}
                 </div>
-              ) : activePhase === 'kitty' && isBidder ? (
-                <div className="bidding-card action-card">
-                  <p className="eyebrow">Kitty</p>
-                  <p className="muted">The kitty has been added to your hand. Discard five cards back to the kitty.</p>
-                  <div className="discard-row">
-                    <span className="discard-count">{selectedDiscards.length}/5 selected</span>
-                    <button className="ghost" onClick={emitDiscardKitty} disabled={!canDiscard}>
-                      Discard 5
-                    </button>
-                  </div>
-                </div>
-              ) : activePhase === 'trick' ? null : activePhase === 'declareTrump' && isBidder ? null : (
+              ) : activePhase === 'kitty' ? null : activePhase === 'trick' ? null : activePhase === 'declareTrump' ? null : (
                 <div className="bidding-card action-card">
                   <p className="eyebrow">Waiting</p>
                   <p className="muted">{phaseStatus}</p>
                 </div>
               )
-            ) : null}
-
-            {activePhase === 'declareTrump' && isBidder ? (
-              <div className="bidding-card action-card">
-                <p className="eyebrow">Declare Trump</p>
-                <p className="muted">Choose the trump color for this hand.</p>
-                <div className="trump-options">
-                  {(['red', 'black', 'yellow', 'green'] as TrumpColor[]).map((color) => (
-                    <button
-                      key={color}
-                      className={`trump-choice trump-${color}${
-                        selectedTrump === color ? ' is-selected' : ''
-                      }`}
-                      onClick={() => setSelectedTrump(color)}
-                    >
-                      {COLOR_LABELS[color]}
-                    </button>
-                  ))}
-                </div>
-                <button className="primary" onClick={emitDeclareTrump}>
-                  Declare Trump
-                </button>
-              </div>
             ) : null}
 
             <div className="bidding-card hand-card">
@@ -2026,6 +2070,38 @@ function App() {
                   </button>
                 ) : null}
               </div>
+              {activePhase === 'declareTrump' && isBidder ? (
+                <>
+                  <p className="muted">Choose the trump color for this hand.</p>
+                  <div className="trump-options">
+                    {(['red', 'black', 'yellow', 'green'] as TrumpColor[]).map((color) => (
+                      <button
+                        key={color}
+                        className={`trump-choice trump-${color}${
+                          selectedTrump === color ? ' is-selected' : ''
+                        }`}
+                        onClick={() => setSelectedTrump(color)}
+                      >
+                        {COLOR_LABELS[color]}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="primary" onClick={emitDeclareTrump}>
+                    Declare Trump
+                  </button>
+                </>
+              ) : null}
+              {activePhase === 'kitty' && isBidder ? (
+                <>
+                  <p className="muted">Discard five cards back to the kitty.</p>
+                  <div className="discard-row">
+                    <span className="discard-count">{selectedDiscards.length}/5 selected</span>
+                    <button className="ghost" onClick={emitDiscardKitty} disabled={!canDiscard}>
+                      Discard 5
+                    </button>
+                  </div>
+                </>
+              ) : null}
               {handCards.length ? (
                 (() => {
                   const isTrickTurn =

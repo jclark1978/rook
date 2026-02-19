@@ -169,7 +169,7 @@ export const createGameState = (
   const firstBidder = (((dealerIndex + 1) % 4) as PlayerId);
   const bidding = createBiddingState(firstBidder, settings?.minBid, settings?.step);
   const startedAt = Date.now();
-  const deckMode = settings?.deckMode ?? 'full';
+  const deckMode = settings?.deckMode ?? 'fast';
   const rookRankMode = settings?.rookRankMode ?? 'rookHigh';
   const targetScore = settings?.targetScore ?? 700;
   const { hands, kitty, seed } = dealHands(roomCode, startedAt, deckMode);
@@ -235,7 +235,7 @@ const createPreDealState = (
   const dealerIndex = settings?.startingPlayer ?? 0;
   const dealerSeat = seatOrder[dealerIndex];
   const bidding = createBiddingState((((dealerIndex + 1) % 4) as PlayerId), settings?.minBid, settings?.step);
-  const deckMode = settings?.deckMode ?? 'full';
+  const deckMode = settings?.deckMode ?? 'fast';
   const rookRankMode = settings?.rookRankMode ?? 'rookHigh';
   const targetScore = settings?.targetScore ?? 700;
   const hand: HandState = {
@@ -286,9 +286,13 @@ const createPreDealState = (
   };
 };
 
-const dealCurrentHand = (state: GameState, rookRankMode: RookRankMode): GameState => {
+const dealCurrentHand = (
+  state: GameState,
+  rookRankMode: RookRankMode,
+  deckMode: DeckMode,
+): GameState => {
   const startedAt = Date.now();
-  const { hands, kitty, seed } = dealHands(state.roomCode, startedAt, state.hand.deckMode);
+  const { hands, kitty, seed } = dealHands(state.roomCode, startedAt, deckMode);
   const bidding = createBiddingState(
     (((state.dealerIndex + 1) % 4) as PlayerId),
     state.bidding.minBid,
@@ -307,6 +311,7 @@ const dealCurrentHand = (state: GameState, rookRankMode: RookRankMode): GameStat
     hand: {
       ...state.hand,
       phase: 'bidding',
+      deckMode,
       startedAt,
       seed,
       kitty,
@@ -507,6 +512,7 @@ export class GameStore {
     roomCode: string,
     playerId: string,
     rookRankMode?: RookRankMode,
+    deckMode?: DeckMode,
   ): GameResult<GameState> {
     const game = this.games.get(roomCode);
     if (!game) return { ok: false, error: 'game missing' };
@@ -518,7 +524,11 @@ export class GameStore {
     if (mode !== 'rookHigh' && mode !== 'rookLow') {
       return { ok: false, error: 'invalid rook rank mode' };
     }
-    const nextState = dealCurrentHand(state, mode);
+    const resolvedDeckMode = deckMode ?? 'fast';
+    if (resolvedDeckMode !== 'full' && resolvedDeckMode !== 'fast') {
+      return { ok: false, error: 'invalid deck mode' };
+    }
+    const nextState = dealCurrentHand(state, mode, resolvedDeckMode);
     game.state = nextState;
     return { ok: true, value: nextState };
   }
@@ -858,7 +868,7 @@ export class GameStore {
     );
     const hand: HandState = {
       phase: 'preDeal',
-      deckMode: state.hand.deckMode,
+      deckMode: 'fast',
       dealerSeat,
       startedAt: Date.now(),
       seed: 0,
