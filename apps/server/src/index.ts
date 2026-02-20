@@ -142,6 +142,7 @@ const toHandPublicState = (state: GameState) => {
     targetScore: state.targetScore,
     winnerTeam: state.winnerTeam,
     undoAvailableForSeat,
+    handHistory: state.handHistory,
   };
 };
 

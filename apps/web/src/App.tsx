@@ -109,6 +109,17 @@ type HandPublicState = {
   undoAvailableForSeat?: SeatId | null
   targetScore?: number
   winnerTeam?: 0 | 1 | null
+  handHistory?: HandHistoryEntry[]
+}
+
+type HandHistoryEntry = {
+  handNumber: number
+  bidAmount: number
+  bidderSeat: SeatId | null
+  bidderPlayerId: string | null
+  biddingTeam: 0 | 1
+  biddersSet: boolean
+  handScores: [number, number]
 }
 
 type HandPrivateState = {
@@ -283,6 +294,7 @@ function App() {
   } | null>(null)
   const [isPreviousTurnCollapsed, setIsPreviousTurnCollapsed] = useState(false)
   const [scoresRevealed, setScoresRevealed] = useState(false)
+  const [isScoreboardExpanded, setIsScoreboardExpanded] = useState(false)
   const socketRef = useRef<Socket | null>(null)
   const scorePhaseRef = useRef<string | null>(null)
   const ROOM_CODE_REGEX = /^[A-Z0-9]{4}$/
@@ -818,6 +830,13 @@ function App() {
     return 'Bidding in progress.'
   }, [activePhase, isBidder, mySeat, dealerSeat, scoresRevealed])
 
+  const isMyBiddingActionTurn = activePhase === 'bidding' && isMyTurn
+  const isMyPreDealActionTurn = activePhase === 'preDeal' && mySeat?.id === dealerSeat
+  const isMyHandActionTurn = Boolean(
+    (activePhase === 'trick' && mySeat?.id && handState?.whoseTurnSeat === mySeat.id) ||
+      ((activePhase === 'kitty' || activePhase === 'declareTrump') && isBidder),
+  )
+
   const currentTrump = useMemo((): TrumpColor | null => {
     if (!handState) return null
     const trumpFromState =
@@ -834,9 +853,8 @@ function App() {
   const deckMode: DeckMode = handState?.deckMode ?? gameState?.deckMode ?? 'fast'
   const targetScore =
     handState?.targetScore ?? gameState?.targetScore ?? roomState?.targetScore ?? 700
-  const houseRuleLabel = `${rookRankMode === 'rookLow' ? 'Rook Low' : 'Rook High'} · ${
-    deckMode === 'full' ? '2/3/4 Included' : '2/3/4 Removed'
-  }`
+  const rookRuleLabel = rookRankMode === 'rookLow' ? 'Rook Low' : 'Rook High'
+  const lowCardsRuleLabel = deckMode === 'full' ? "2's, 3's, 4's included" : "2's, 3's, 4's removed"
 
   useEffect(() => {
     if (activePhase !== 'preDeal') return
@@ -848,6 +866,8 @@ function App() {
   const gameWinnerTeam = handState?.winnerTeam ?? gameState?.winnerTeam ?? null
   const gameWinnerLabel =
     gameWinnerTeam === 0 ? 'Team 1' : gameWinnerTeam === 1 ? 'Team 2' : null
+
+  const handHistory = handState?.handHistory ?? []
 
   const emitBid = (amount: number) => {
     if (!roomCode) return
@@ -1158,10 +1178,99 @@ function App() {
   const getOpenSeatPlaceholder = (seatId: SeatId) =>
     seatId.endsWith('P1') ? 'Player 1' : 'Player 2'
 
+  const getTeamHeaderLabel = (teamSeats: SeatId[]) => {
+    const names = teamSeats.map((seatId) => {
+      const owner = roomState?.seats?.[seatId]
+      if (!owner) return getOpenSeatPlaceholder(seatId)
+      return getPlayerName(owner)
+    })
+    return names.join(' / ')
+  }
+
+  const teamOneHeader = getTeamHeaderLabel(['T1P1', 'T1P2'])
+  const teamTwoHeader = getTeamHeaderLabel(['T2P1', 'T2P2'])
+  const shouldShowInlineScoreboard = activePhase !== 'score' && activePhase !== 'gameOver'
+
   const formatTrumpLabel = (trump: string | null) => {
     if (!trump) return null
     return trump.charAt(0).toUpperCase() + trump.slice(1)
   }
+
+  const renderScoreboardTable = () => (
+    <div className="score-table-wrap">
+      <table className="score-table">
+        <thead>
+          <tr>
+            <th>Hand #</th>
+            <th>Bid</th>
+            <th>{teamOneHeader}</th>
+            <th>{teamTwoHeader}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {handHistory.length ? (
+            handHistory.map((entry) => {
+              const bidderName = entry.bidderPlayerId
+                ? getPlayerName(entry.bidderPlayerId)
+                : entry.bidderSeat
+                  ? getSeatDisplayName(entry.bidderSeat)
+                  : 'Unknown'
+              const teamOneValue =
+                entry.biddingTeam === 0 && entry.biddersSet
+                  ? -entry.bidAmount
+                  : entry.handScores[0]
+              const teamTwoValue =
+                entry.biddingTeam === 1 && entry.biddersSet
+                  ? -entry.bidAmount
+                  : entry.handScores[1]
+
+              return (
+                <tr key={entry.handNumber}>
+                  <td>{entry.handNumber}</td>
+                  <td>
+                    <div className="score-bid-cell">
+                      <span>{entry.bidAmount}</span>
+                      <span className="score-pill bidder">{bidderName}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="score-team-cell">
+                      <span>{teamOneValue}</span>
+                      {entry.biddersSet && entry.biddingTeam === 0 ? (
+                        <span className="score-pill set">Set</span>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="score-team-cell">
+                      <span>{teamTwoValue}</span>
+                      {entry.biddersSet && entry.biddingTeam === 1 ? (
+                        <span className="score-pill set">Set</span>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })
+          ) : (
+            <tr>
+              <td colSpan={4} className="score-empty">
+                No scored hands yet.
+              </td>
+            </tr>
+          )}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Total</td>
+            <td>Target: {targetScore}</td>
+            <td>{gameScores?.[0] ?? 0}</td>
+            <td>{gameScores?.[1] ?? 0}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  )
 
   const winningBidAmount = handState?.winningBid?.amount ?? biddingState?.highBid?.amount ?? null
   const bidLabelForSeat = (seat: SeatId) => {
@@ -1681,23 +1790,39 @@ function App() {
             <div>
               <p className="eyebrow">Bidding</p>
               <h1>{roomCode || 'ROOM'}</h1>
-              <p className="muted">Open bids are visible to everyone.</p>
+              <p className="muted">Bidding starts at 100 max bid 200 (Perfect game)</p>
             </div>
             <div className="gameplay-header-actions">
               <div className="house-rules-panel">
                 <p className="meta-label">House Rules</p>
-                <p className="meta-value">{houseRuleLabel}</p>
+                <p className="meta-value">{rookRuleLabel}</p>
+                <p className="meta-value">{lowCardsRuleLabel}</p>
                 <p className="meta-value">Game Winning Score: {targetScore}</p>
               </div>
-              <button className="ghost compact-button" onClick={() => setView('lobby')}>
-                Back to Lobby
-              </button>
+              <div className="gameplay-header-nav">
+                <button className="ghost compact-button" onClick={() => setView('lobby')}>
+                  Return to Lobby
+                </button>
+                <button
+                  className="ghost compact-button"
+                  type="button"
+                  onClick={() => setIsScoreboardExpanded((current) => !current)}
+                >
+                  {isScoreboardExpanded ? 'Hide Scoreboard' : 'Show Scoreboard'}
+                </button>
+              </div>
             </div>
+            {shouldShowInlineScoreboard && isScoreboardExpanded ? (
+              <div className="lobby-header-scoreboard">
+                <p className="eyebrow">Scoreboard</p>
+                {renderScoreboardTable()}
+              </div>
+            ) : null}
           </section>
           {renderSeatStrip()}
 
           <section className="bidding-grid">
-            <div className="bidding-card">
+            <div className={`bidding-card action-card${isMyBiddingActionTurn ? ' is-user-active' : ''}`}>
               <p className="eyebrow">Your Action</p>
               <div className="bidding-actions">
                 <button
@@ -1765,7 +1890,7 @@ function App() {
               </div>
             </div>
 
-            <div className="bidding-card hand-card">
+            <div className={`bidding-card hand-card${isMyBiddingActionTurn ? ' is-user-active' : ''}`}>
               <div className="hand-header">
                 <p className="eyebrow">Your Hand</p>
                 {activePhase === 'trick' &&
@@ -1817,13 +1942,29 @@ function App() {
             <div className="gameplay-header-actions">
               <div className="house-rules-panel">
                 <p className="meta-label">House Rules</p>
-                <p className="meta-value">{houseRuleLabel}</p>
+                <p className="meta-value">{rookRuleLabel}</p>
+                <p className="meta-value">{lowCardsRuleLabel}</p>
                 <p className="meta-value">Game Winning Score: {targetScore}</p>
               </div>
-              <button className="ghost compact-button" onClick={() => setView('lobby')}>
-                Back to Lobby
-              </button>
+              <div className="gameplay-header-nav">
+                <button className="ghost compact-button" onClick={() => setView('lobby')}>
+                  Return to Lobby
+                </button>
+                <button
+                  className="ghost compact-button"
+                  type="button"
+                  onClick={() => setIsScoreboardExpanded((current) => !current)}
+                >
+                  {isScoreboardExpanded ? 'Hide Scoreboard' : 'Show Scoreboard'}
+                </button>
+              </div>
             </div>
+            {shouldShowInlineScoreboard && isScoreboardExpanded ? (
+              <div className="lobby-header-scoreboard">
+                <p className="eyebrow">Scoreboard</p>
+                {renderScoreboardTable()}
+              </div>
+            ) : null}
           </section>
           {renderSeatStrip()}
           {(activePhase === 'kitty' || activePhase === 'declareTrump') && !isBidder ? (
@@ -1839,46 +1980,8 @@ function App() {
           >
             {(activePhase === 'score' || activePhase === 'gameOver') && scoresRevealed ? (
               <div className="bidding-card summary-card">
-                <p className="eyebrow">{activePhase === 'gameOver' ? 'Final Summary' : 'Hand Summary'}</p>
-                <div className="summary-grid">
-                  <div>
-                    <p className="meta-label">Winning bid</p>
-                    <p className="meta-value">
-                      {handState?.winningBid
-                        ? `${handState.winningBid.amount}`
-                        : '—'}{' '}
-                      {bidderSeat ? `(${getSeatDisplayName(bidderSeat)})` : ''}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Points captured</p>
-                    <p className="meta-value">
-                      Team One: {handState?.handPoints?.[0] ?? '—'}
-                    </p>
-                    <p className="meta-value">
-                      Team Two: {handState?.handPoints?.[1] ?? '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Bidders set</p>
-                    <p className="meta-value">
-                      {handState?.biddersSet == null
-                        ? '—'
-                        : handState.biddersSet
-                          ? 'Yes'
-                          : 'No'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="meta-label">Game score</p>
-                    <p className="meta-value">
-                      Team One: {gameScores?.[0] ?? '—'}
-                    </p>
-                    <p className="meta-value">
-                      Team Two: {gameScores?.[1] ?? '—'}
-                    </p>
-                  </div>
-                </div>
+                <p className="eyebrow">{activePhase === 'gameOver' ? 'Final Scoreboard' : 'Scoreboard'}</p>
+                {renderScoreboardTable()}
                 {activePhase === 'gameOver' && gameWinnerLabel ? (
                   <div className={`victory-banner team-${gameWinnerTeam === 0 ? 'one' : 'two'}`}>
                     <div className="victory-fireworks" aria-hidden="true">
@@ -2004,12 +2107,12 @@ function App() {
 
             {activePhase !== 'score' && activePhase !== 'gameOver' ? (
               activePhase === 'preDeal' ? (
-                <div className="bidding-card action-card">
+                <div className={`bidding-card action-card${isMyPreDealActionTurn ? ' is-user-active' : ''}`}>
                   <p className="eyebrow">Deal Setup</p>
                   {mySeat?.id === dealerSeat ? (
                     <>
                       <p className="muted">
-                        Choose rook mode and whether to include 2/3/4 cards, then deal.
+                        Choose rook high or low and whether to include low cards (2's,3's, and 4's), then deal.
                       </p>
                       <div className="trump-options">
                         <button
@@ -2033,14 +2136,14 @@ function App() {
                           className={selectedDealIncludeLowCards ? 'primary' : 'ghost'}
                           onClick={() => setSelectedDealIncludeLowCards(true)}
                         >
-                          Include 2/3/4
+                          Include Low Cards
                         </button>
                         <button
                           type="button"
                           className={!selectedDealIncludeLowCards ? 'primary' : 'ghost'}
                           onClick={() => setSelectedDealIncludeLowCards(false)}
                         >
-                          Remove 2/3/4
+                          Remove Low Cards
                         </button>
                       </div>
                       <button className="primary" onClick={emitDealHand}>
@@ -2059,7 +2162,7 @@ function App() {
               )
             ) : null}
 
-            <div className="bidding-card hand-card">
+            <div className={`bidding-card hand-card${isMyHandActionTurn ? ' is-user-active' : ''}`}>
               <div className="hand-header">
                 <p className="eyebrow">Your Hand</p>
                 {activePhase === 'trick' &&

@@ -1,26 +1,28 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Archivo+Black&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --bg: #f5f2ea;
-  --bg-deep: #ece8dc;
-  --panel: rgba(255, 255, 255, 0.78);
+  --bg: #1a1a1a;
+  --bg-deep: #0f172a;
+  --panel: rgba(255, 255, 255, 0.05);
+  --panel-strong: rgba(255, 255, 255, 0.08);
 
-  --text-strong: #162338;
-  --text-soft: rgba(22, 35, 56, 0.78);
-  --text-faint: rgba(22, 35, 56, 0.58);
+  --text-strong: #f3f4f6;
+  --text-soft: rgba(243, 244, 246, 0.78);
+  --text-faint: rgba(243, 244, 246, 0.58);
 
-  --line: rgba(22, 35, 56, 0.14);
-  --line-strong: rgba(22, 35, 56, 0.26);
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.2);
 
-  --accent: #04806b;
-  --accent-strong: #e88127;
+  --accent: #34d399;
+  --accent-strong: #22d3ee;
+  --glass-blur: 12px;
 
-  --shadow-sm: 0 5px 12px rgba(14, 31, 48, 0.1);
-  --shadow-panel: 0 18px 36px rgba(14, 31, 48, 0.13);
+  --shadow-sm: 0 10px 24px -12px rgba(0, 0, 0, 0.65);
+  --shadow-panel: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
 
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Inter', 'Geist', 'Roboto', sans-serif;
   line-height: 1.4;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-strong);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -47,9 +49,10 @@ body {
   min-height: 100vh;
   overflow-x: clip;
   background:
-    radial-gradient(circle at 7% 4%, rgba(232, 129, 39, 0.16), transparent 40%),
-    radial-gradient(circle at 87% 12%, rgba(4, 128, 107, 0.16), transparent 42%),
-    linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%);
+    radial-gradient(circle at 10% 8%, rgba(6, 78, 59, 0.7), transparent 42%),
+    radial-gradient(circle at 88% 16%, rgba(15, 23, 42, 0.85), transparent 46%),
+    radial-gradient(circle at 44% 85%, rgba(6, 78, 59, 0.55), transparent 52%),
+    linear-gradient(140deg, #1a1a1a 0%, #0f172a 54%, #064e3b 100%);
   color: var(--text-strong);
 }
 
@@ -59,10 +62,10 @@ body::before {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
-  background-size: 28px 28px;
-  opacity: 0.35;
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 42px 42px;
+  opacity: 0.2;
   mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
 }
 
@@ -81,8 +84,17 @@ input {
 }
 
 :focus-visible {
-  outline: 3px solid rgba(4, 128, 107, 0.44);
+  outline: 3px solid rgba(52, 211, 153, 0.5);
   outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  letter-spacing: -0.01em;
 }
 
 @media (prefers-reduced-motion: reduce) {
