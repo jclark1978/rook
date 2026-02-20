@@ -71,6 +71,17 @@ export type GameState = {
   dealerIndex: PlayerId;
   targetScore: number;
   winnerTeam: 0 | 1 | null;
+  handHistory: HandHistoryEntry[];
+};
+
+export type HandHistoryEntry = {
+  handNumber: number;
+  bidAmount: number;
+  bidderSeat: Seat | null;
+  bidderPlayerId: string | null;
+  biddingTeam: 0 | 1;
+  biddersSet: boolean;
+  handScores: [number, number];
 };
 
 export type GameStartSettings = {
@@ -218,6 +229,7 @@ export const createGameState = (
       dealerIndex,
       targetScore,
       winnerTeam: null,
+      handHistory: [],
     },
   };
 };
@@ -282,6 +294,7 @@ const createPreDealState = (
       dealerIndex,
       targetScore,
       winnerTeam: null,
+      handHistory: [],
     },
   };
 };
@@ -789,6 +802,7 @@ export class GameStore {
     let handScores = state.hand.handScores;
     let biddersSet = state.hand.biddersSet;
 
+    let handHistory = state.handHistory;
     if (handComplete) {
       const winningBid = state.hand.winningBid;
       const bidAmount = winningBid?.amount ?? 0;
@@ -806,6 +820,24 @@ export class GameStore {
       handPoints = scored.points;
       handScores = scored.scores;
       biddersSet = scored.points[biddingTeam] < bidAmount;
+      handHistory = [
+        ...state.handHistory,
+        {
+          handNumber: state.handHistory.length + 1,
+          bidAmount,
+          bidderSeat:
+            winningBid && state.seatOrder[winningBid.player]
+              ? state.seatOrder[winningBid.player]
+              : null,
+          bidderPlayerId:
+            winningBid && state.playerOrder[winningBid.player]
+              ? state.playerOrder[winningBid.player]
+              : null,
+          biddingTeam,
+          biddersSet,
+          handScores: scored.scores,
+        },
+      ];
       const winnerTeam = scores[0] >= state.targetScore ? 0 : scores[1] >= state.targetScore ? 1 : null;
       phase = winnerTeam === null ? 'score' : 'gameOver';
       handPhase = phase;
@@ -822,6 +854,7 @@ export class GameStore {
       scores,
       gameScore: scores,
       winnerTeam: scores[0] >= state.targetScore ? 0 : scores[1] >= state.targetScore ? 1 : null,
+      handHistory,
       hand: {
         ...state.hand,
         phase: handPhase,

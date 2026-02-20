@@ -10,6 +10,197 @@
   gap: clamp(1rem, 1.8vw, 1.75rem);
 }
 
+/* Phase 1 contrast patch: keep glass look but fix readability on critical panels */
+.lobby-header,
+.house-rules-panel,
+.seat-strip,
+.seat-pill,
+.seat-pill-menu-popover,
+.bidding-card,
+.top-meta,
+.bidding-meta,
+.summary-grid,
+.history-list li,
+.phase-inline-message,
+.lobby-code-block {
+  background: rgba(10, 18, 30, 0.62);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.lobby-header {
+  background:
+    radial-gradient(circle at 88% 12%, rgba(34, 211, 238, 0.14), transparent 42%),
+    rgba(10, 18, 30, 0.62);
+}
+
+.lobby-header h1,
+.lobby-header .muted,
+.house-rules-panel .meta-label,
+.house-rules-panel .meta-value,
+.seat-pill-name,
+.seat-status,
+.seat-flag,
+.eyebrow,
+.meta-label,
+.history-empty,
+.history-list li span,
+.phase-inline-message {
+  color: #e5e7eb;
+}
+
+.seat-pill {
+  box-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.68);
+}
+
+.seat-pill.is-mine,
+.seat-pill.is-bidding-turn {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.card-pill.card-rook .card-rank-rook,
+.card-pill.card-rook .card-color-name {
+  color: #111827;
+}
+
+.card-pill.card-rook img.card-rook {
+  border-color: rgba(17, 24, 39, 0.32);
+}
+
+.action-card .history-list li,
+.action-card .bidding-history-inline {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+/* Phase 1: The Rook Room - modern glassmorphism overrides */
+.brand-title,
+.score-overlay-modal h2,
+.entry-modal h2,
+.hero h1,
+.lobby h1,
+.bidding h1,
+.hand h1,
+.info-card h2,
+.victory-banner h2,
+.seat-id,
+.lobby-code-row code,
+.bidding-amount,
+.table-center-label {
+  font-family: inherit;
+  letter-spacing: -0.01em;
+}
+
+.top-bar,
+.hero,
+.entry-modal,
+.score-overlay-modal,
+.info-card,
+.seat-card,
+.bidding-card,
+.lobby-header,
+.lobby-config-card,
+.team-card,
+.team-seat-card,
+.seat-strip,
+.seat-pill,
+.house-rules-panel,
+.lobby-code-block,
+.top-meta,
+.bidding-meta,
+.summary-grid,
+.table-seat,
+.table-center {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(var(--glass-blur));
+}
+
+.hero {
+  background:
+    radial-gradient(circle at 90% 8%, rgba(34, 211, 238, 0.14), transparent 45%),
+    radial-gradient(circle at 10% 90%, rgba(52, 211, 153, 0.14), transparent 45%),
+    rgba(255, 255, 255, 0.05);
+}
+
+.status-pill,
+.seat-pill,
+.team-seat-card,
+.lobby-code-block,
+.phase-inline-message,
+.history-list li {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.lobby-header,
+.entry-modal,
+.score-overlay-modal,
+.house-rules-panel {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.house-rules-panel,
+.table-seat-name,
+.seat-pill-name,
+.team-seat-player,
+.meta-value {
+  color: var(--text-strong);
+}
+
+.muted,
+.seat-status,
+.seat-team,
+.seat-occupant,
+.table-center-label {
+  color: var(--text-soft);
+}
+
+button {
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-strong);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.38);
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.38), 0 10px 24px rgba(0, 0, 0, 0.4);
+}
+
+button.primary,
+button.ready {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.76), rgba(6, 182, 212, 0.7));
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #f8fafc;
+}
+
+button.primary:hover,
+button.ready:hover {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.34), 0 0 20px rgba(52, 211, 153, 0.42);
+}
+
+.action-card.is-user-active,
+.hand-card.is-user-active {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 10px 30px -10px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 0 24px rgba(52, 211, 153, 0.16);
+}
+
+.card-pill {
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.card-pill.card-click:hover,
+.card-pill.card-select:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.33);
+}
+
 .top-bar {
   display: flex;
   justify-content: space-between;
@@ -30,18 +221,22 @@
 }
 
 .brand-mark {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 12px;
+  width: 3.1rem;
+  height: 3.1rem;
+  border-radius: 10px;
   border: 1px solid var(--line-strong);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  background: #ffffff;
+  display: grid;
+  place-items: center;
 }
 
 .brand-mark img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  width: 94%;
+  height: 94%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .brand-title {
@@ -371,6 +566,13 @@ button:disabled {
   justify-content: flex-end;
   gap: 0.6rem;
   flex-wrap: wrap;
+}
+
+.gameplay-header-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: stretch;
 }
 
 .house-rules-panel {
@@ -2390,4 +2592,412 @@ button:disabled {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
+}
+
+/* Final contrast overrides (must stay at EOF) */
+.lobby-header,
+.house-rules-panel,
+.seat-strip,
+.seat-pill,
+.seat-pill-menu-popover,
+.bidding-card,
+.top-meta,
+.bidding-meta,
+.summary-grid,
+.history-list li,
+.phase-inline-message,
+.lobby-code-block {
+  background: rgba(10, 18, 30, 0.62) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+.lobby-header {
+  background:
+    radial-gradient(circle at 88% 12%, rgba(34, 211, 238, 0.14), transparent 42%),
+    rgba(10, 18, 30, 0.62) !important;
+}
+
+.lobby-header h1,
+.lobby-header .muted,
+.house-rules-panel .meta-label,
+.house-rules-panel .meta-value,
+.seat-pill-name,
+.seat-status,
+.seat-flag,
+.eyebrow,
+.meta-label,
+.history-empty,
+.history-list li span,
+.phase-inline-message {
+  color: #e5e7eb !important;
+}
+
+.seat-pill {
+  box-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.68) !important;
+}
+
+.seat-pill.is-mine,
+.seat-pill.is-bidding-turn {
+  border-color: rgba(255, 255, 255, 0.32) !important;
+}
+
+.card-pill.card-rook .card-rank-rook,
+.card-pill.card-rook .card-color-name {
+  color: #111827 !important;
+}
+
+.card-pill.card-rook img.card-rook {
+  border-color: rgba(17, 24, 39, 0.32) !important;
+}
+
+.action-card .history-list li,
+.action-card .bidding-history-inline {
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+/* Indicator + action-control readability fixes */
+.seat-pill.is-mine {
+  border-color: rgba(52, 211, 153, 0.82) !important;
+  box-shadow:
+    0 0 0 1px rgba(52, 211, 153, 0.45),
+    0 10px 26px -12px rgba(0, 0, 0, 0.68) !important;
+}
+
+.seat-pill.is-bidding-turn {
+  border-color: rgba(251, 146, 60, 0.9) !important;
+  box-shadow:
+    0 0 0 1px rgba(251, 146, 60, 0.42),
+    0 10px 26px -12px rgba(0, 0, 0, 0.68) !important;
+}
+
+.seat-pill-name.is-bidding-turn-name {
+  color: #111827 !important;
+  background: rgba(255, 237, 213, 0.95) !important;
+  border-color: rgba(251, 146, 60, 0.9) !important;
+}
+
+.seat-flag {
+  color: #111827 !important;
+  background: rgba(226, 232, 240, 0.9) !important;
+  border-color: rgba(148, 163, 184, 0.5) !important;
+}
+
+.seat-flag.turn {
+  color: #111827 !important;
+  background: rgba(251, 191, 36, 0.88) !important;
+  border-color: rgba(251, 191, 36, 0.95) !important;
+}
+
+.bidding-card .ghost {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #f3f4f6 !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.bidding-card button:disabled {
+  opacity: 1 !important;
+  background: rgba(148, 163, 184, 0.32) !important;
+  color: rgba(226, 232, 240, 0.92) !important;
+  border-color: rgba(203, 213, 225, 0.38) !important;
+  box-shadow: none !important;
+}
+
+.lobby-header .compact-button.ghost {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #f3f4f6 !important;
+  border-color: rgba(255, 255, 255, 0.32) !important;
+}
+
+.lobby-header .compact-button.ghost:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.lobby-header .compact-button.ghost:disabled {
+  opacity: 1 !important;
+  background: rgba(148, 163, 184, 0.32) !important;
+  color: rgba(226, 232, 240, 0.92) !important;
+  border-color: rgba(203, 213, 225, 0.38) !important;
+}
+
+/* Trick/kitty table seat readability */
+.trick-card .table-seat {
+  background: rgba(10, 18, 30, 0.72) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.trick-card .table-seat-name {
+  color: #e5e7eb !important;
+}
+
+.trick-card .table-seat-meta {
+  color: #e5e7eb !important;
+}
+
+.trick-card .table-seat-summary {
+  color: #e5e7eb !important;
+}
+
+/* Home hero readability */
+.hero {
+  background:
+    radial-gradient(circle at 88% 12%, rgba(34, 211, 238, 0.16), transparent 42%),
+    radial-gradient(circle at 10% 92%, rgba(52, 211, 153, 0.14), transparent 44%),
+    rgba(10, 18, 30, 0.64) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+.hero h1 {
+  color: #f3f4f6 !important;
+}
+
+.hero p {
+  color: #d1d5db !important;
+}
+
+/* Global contrast baseline to prevent repeated washout regressions */
+button.ghost,
+button.not-ready {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #f3f4f6 !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+button.ghost:hover,
+button.not-ready:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.48) !important;
+}
+
+button:disabled {
+  opacity: 1 !important;
+  background: rgba(148, 163, 184, 0.32) !important;
+  color: rgba(226, 232, 240, 0.92) !important;
+  border-color: rgba(203, 213, 225, 0.38) !important;
+  box-shadow: none !important;
+}
+
+.entry-form input,
+.join-row input,
+.bid-input-row input {
+  background: rgba(15, 23, 42, 0.82) !important;
+  color: #f3f4f6 !important;
+  border-color: rgba(255, 255, 255, 0.26) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+.entry-form input::placeholder,
+.join-row input::placeholder,
+.bid-input-row input::placeholder {
+  color: rgba(226, 232, 240, 0.7) !important;
+}
+
+.hero .join-block label {
+  color: #e5e7eb !important;
+}
+
+/* Entry modal readability */
+.entry-modal {
+  background: rgba(10, 18, 30, 0.78) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.5) !important;
+}
+
+.entry-modal h2,
+.entry-modal .muted,
+.entry-modal .meta-label {
+  color: #e5e7eb !important;
+}
+
+/* Score modal readability */
+.score-overlay-modal {
+  background: rgba(10, 18, 30, 0.78) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.5) !important;
+}
+
+.score-overlay-modal h2,
+.score-overlay-modal .muted,
+.score-overlay-modal .meta-label,
+.score-overlay-modal .eyebrow,
+.score-overlay-modal p {
+  color: #e5e7eb !important;
+}
+
+/* Subtle readability bump for black trump option */
+.trump-choice.trump-black {
+  color: #94a3b8 !important;
+  background: rgba(51, 65, 85, 0.2) !important;
+  border-color: rgba(148, 163, 184, 0.45) !important;
+}
+
+/* Clear selected feedback for trump choice */
+.trump-choice {
+  position: relative;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.trump-choice.is-selected {
+  transform: translateY(-1px) scale(1.02) !important;
+  border-color: rgba(255, 255, 255, 0.62) !important;
+  box-shadow:
+    0 0 0 2px rgba(52, 211, 153, 0.52),
+    0 10px 22px rgba(0, 0, 0, 0.35) !important;
+}
+
+.trump-choice.is-selected::after {
+  content: '✓';
+  position: absolute;
+  top: -0.45rem;
+  right: -0.35rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: #ecfeff;
+  background: rgba(6, 182, 212, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.32);
+}
+
+/* Lobby teams readability */
+.lobby-teams .team-card {
+  background: rgba(10, 18, 30, 0.68) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+.lobby-teams .team-card.team-one {
+  background:
+    radial-gradient(circle at 8% 15%, rgba(56, 189, 248, 0.14), transparent 45%),
+    rgba(10, 18, 30, 0.68) !important;
+  border-color: rgba(125, 211, 252, 0.3) !important;
+}
+
+.lobby-teams .team-card.team-two {
+  background:
+    radial-gradient(circle at 8% 15%, rgba(251, 146, 60, 0.14), transparent 45%),
+    rgba(10, 18, 30, 0.68) !important;
+  border-color: rgba(253, 186, 116, 0.3) !important;
+}
+
+.lobby-teams .team-seat-card {
+  background: rgba(15, 23, 42, 0.74) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.lobby-teams .team-seat-card.is-mine {
+  border-color: rgba(52, 211, 153, 0.76) !important;
+  box-shadow:
+    0 0 0 1px rgba(52, 211, 153, 0.35),
+    0 10px 24px -12px rgba(0, 0, 0, 0.65) !important;
+}
+
+.lobby-teams .seat-id,
+.lobby-teams .team-seat-player,
+.lobby-teams .seat-team,
+.lobby-teams .team-seat-status {
+  color: #e5e7eb !important;
+}
+
+.lobby-teams .ready-dot {
+  background: rgba(148, 163, 184, 0.7) !important;
+}
+
+.lobby-teams .ready-dot.is-ready {
+  background: #34d399 !important;
+}
+
+.lobby-teams .team-seat-actions .ghost {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #f3f4f6 !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+/* Scoreboard table */
+.score-table-wrap {
+  overflow-x: auto;
+}
+
+.score-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(10, 18, 30, 0.55);
+}
+
+.score-table th,
+.score-table td {
+  padding: 0.6rem 0.7rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e5e7eb;
+  text-align: left;
+  font-size: 0.84rem;
+}
+
+.score-table th {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.76);
+}
+
+.score-table tfoot td {
+  font-weight: 700;
+  background: rgba(15, 23, 42, 0.76);
+}
+
+.score-table tr:last-child td {
+  border-bottom: none;
+}
+
+.score-bid-cell,
+.score-team-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.score-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 999px;
+  padding: 0.12rem 0.42rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.score-pill.bidder {
+  background: rgba(226, 232, 240, 0.14);
+  color: #e2e8f0;
+}
+
+.score-pill.set {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #fca5a5;
+}
+
+.score-empty {
+  text-align: center !important;
+  color: #cbd5e1 !important;
+}
+
+.lobby-header-scoreboard {
+  width: 100%;
+  margin-top: 0.4rem;
+}
+
+.lobby-header-scoreboard .score-table-wrap {
+  margin-top: 0.45rem;
 }
