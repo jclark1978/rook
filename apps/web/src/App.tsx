@@ -64,6 +64,7 @@ type BiddingState = {
   minBid?: number
   step?: number
   highBid?: { player: number; amount: number } | null
+  passed?: [boolean, boolean, boolean, boolean]
   history?: BiddingHistoryEntry[]
   passPartnerAllowed?: boolean
   passPartnerUsed?: [boolean, boolean]
@@ -110,6 +111,7 @@ type HandPublicState = {
   targetScore?: number
   winnerTeam?: 0 | 1 | null
   handHistory?: HandHistoryEntry[]
+  kittyCards?: unknown[]
 }
 
 type HandHistoryEntry = {
@@ -157,22 +159,27 @@ const normalizeCard = (raw: unknown): Card | null => {
     return null
   }
   if (typeof raw === 'object') {
-    const candidate = raw as { kind?: string; color?: string; rank?: number }
+    const candidate = raw as { kind?: string; color?: string; rank?: number | string }
     if (candidate.kind === 'rook') return { kind: 'rook' }
     if (
       candidate.kind === 'suit' &&
       typeof candidate.color === 'string' &&
-      typeof candidate.rank === 'number'
+      (typeof candidate.rank === 'number' || typeof candidate.rank === 'string')
     ) {
       const color = candidate.color.toLowerCase() as TrumpColor
-      if (color in COLOR_LABELS) {
-        return { kind: 'suit', color, rank: candidate.rank }
+      const parsedRank = typeof candidate.rank === 'number' ? candidate.rank : Number(candidate.rank)
+      if (color in COLOR_LABELS && Number.isFinite(parsedRank)) {
+        return { kind: 'suit', color, rank: parsedRank }
       }
     }
-    if (typeof candidate.color === 'string' && typeof candidate.rank === 'number') {
+    if (
+      typeof candidate.color === 'string' &&
+      (typeof candidate.rank === 'number' || typeof candidate.rank === 'string')
+    ) {
       const color = candidate.color.toLowerCase() as TrumpColor
-      if (color in COLOR_LABELS) {
-        return { kind: 'suit', color, rank: candidate.rank }
+      const parsedRank = typeof candidate.rank === 'number' ? candidate.rank : Number(candidate.rank)
+      if (color in COLOR_LABELS && Number.isFinite(parsedRank)) {
+        return { kind: 'suit', color, rank: parsedRank }
       }
     }
   }
@@ -286,6 +293,7 @@ function App() {
   const [playNotice, setPlayNotice] = useState<{
     id: number
     text: string
+    suit?: TrumpColor
   } | null>(null)
   const [previousTurnSummary, setPreviousTurnSummary] = useState<{
     signature: string
@@ -295,13 +303,51 @@ function App() {
   const [isPreviousTurnCollapsed, setIsPreviousTurnCollapsed] = useState(false)
   const [scoresRevealed, setScoresRevealed] = useState(false)
   const [isScoreboardExpanded, setIsScoreboardExpanded] = useState(false)
+  const [isKittyRevealCollapsed, setIsKittyRevealCollapsed] = useState(false)
   const socketRef = useRef<Socket | null>(null)
   const scorePhaseRef = useRef<string | null>(null)
+  const leadSuitRef = useRef<TrumpColor | null>(null)
   const ROOM_CODE_REGEX = /^[A-Z0-9]{4}$/
 
   useEffect(() => {
     entryModeRef.current = entryMode
   }, [entryMode])
+
+  useEffect(() => {
+    const rawTrickCards = handState?.trickCards
+    if (!Array.isArray(rawTrickCards) || rawTrickCards.length === 0) {
+      leadSuitRef.current = null
+      return
+    }
+
+    const first = rawTrickCards[0]
+    const firstCardRaw =
+      first && typeof first === 'object' && 'card' in (first as Record<string, unknown>)
+        ? (first as { card: unknown }).card
+        : first
+    const firstCard = normalizeCard(firstCardRaw)
+    if (!firstCard) {
+      leadSuitRef.current = null
+      return
+    }
+
+    if (firstCard.kind === 'suit') {
+      leadSuitRef.current = firstCard.color
+      return
+    }
+
+    const trumpFromState = typeof handState?.trump === 'string' ? handState.trump.toLowerCase() : null
+    if (
+      firstCard.kind === 'rook' &&
+      trumpFromState &&
+      (trumpFromState as TrumpColor) in COLOR_LABELS
+    ) {
+      leadSuitRef.current = trumpFromState as TrumpColor
+      return
+    }
+
+    leadSuitRef.current = null
+  }, [handState])
 
   useEffect(() => {
     // If you open the web UI from another device, `localhost` would point at *that* device.
@@ -419,9 +465,13 @@ function App() {
     const handleGameError = (payload: { message?: string }) => {
       if (payload?.message) {
         if (payload.message.toLowerCase().includes('illegal play')) {
+          const leadSuit = leadSuitRef.current
           setPlayNotice({
             id: Date.now(),
-            text: 'Illegal Move: You must play a card matching the suite that lead',
+            text: leadSuit
+              ? `You must follow suit. Since ${COLOR_LABELS[leadSuit]} was led and you have it, play a ${COLOR_LABELS[leadSuit]} card.`
+              : 'You must follow suit. Play a card matching the suit that was led if you have one.',
+            suit: leadSuit ?? undefined,
           })
           return
         }
@@ -711,6 +761,16 @@ function App() {
       return !biddingState.passPartnerUsed[team]
     })()
 
+  const myBiddingIndex = mySeat ? seatOrder.indexOf(mySeat.id) : -1
+  const myHasPassedInBidding =
+    myBiddingIndex >= 0 &&
+    (biddingState?.passed?.[myBiddingIndex] ??
+      Boolean(
+        biddingState?.history?.some(
+          (entry) => entry.player === myBiddingIndex && entry.type === 'pass',
+        ),
+      ))
+
   const activePhase = handState?.phase ?? gameState?.phase ?? 'bidding'
 
   const bidderSeat =
@@ -733,6 +793,7 @@ function App() {
     () => normalizeCards(handPrivate?.kitty ?? handPrivate?.kittyCards),
     [handPrivate],
   )
+  const kittyRevealCards = useMemo(() => normalizeCards(handState?.kittyCards), [handState])
 
   const kittyCardKeys = useMemo(() => {
     const set = new Set<string>()
@@ -770,8 +831,10 @@ function App() {
   }, [handCards, selectedDiscards])
 
   const canDiscard = selectedDiscardCards.length === 5
-  const shouldShowScoreOverlay =
+  const showRoundEndReveal =
     (activePhase === 'score' || activePhase === 'gameOver') && !scoresRevealed
+  const hasKittyRevealCards =
+    (activePhase === 'score' || activePhase === 'gameOver') && kittyRevealCards.length > 0
 
   useEffect(() => {
     setSelectedDiscards([])
@@ -1006,13 +1069,13 @@ function App() {
   }
 
   const handleCustomBid = () => {
-    const amount = Number(customBid)
+    const amount = Number(customBid === '' ? quickBidAmount : customBid)
     if (!Number.isFinite(amount)) return
     if (amount > maxBid) return
     emitBid(amount)
   }
 
-  const customBidAmount = Number(customBid)
+  const customBidAmount = Number(customBid === '' ? quickBidAmount : customBid)
   const isCustomBidValid =
     Number.isFinite(customBidAmount) &&
     customBidAmount >= minBid &&
@@ -1175,6 +1238,9 @@ function App() {
     return getPlayerName(owner)
   }
 
+  const lastHandWinnerSeat = handState?.whoseTurnSeat ?? null
+  const lastHandWinnerName = lastHandWinnerSeat ? getSeatDisplayName(lastHandWinnerSeat) : null
+
   const getOpenSeatPlaceholder = (seatId: SeatId) =>
     seatId.endsWith('P1') ? 'Player 1' : 'Player 2'
 
@@ -1272,10 +1338,59 @@ function App() {
     </div>
   )
 
+  const renderKittyRevealPanel = () => {
+    if (!hasKittyRevealCards) return null
+
+    return (
+      <div className="round-kitty-popover">
+        <div className="trick-result-head">
+          <button
+            type="button"
+            className="ghost trick-collapse"
+            onClick={() => setIsKittyRevealCollapsed((current) => !current)}
+          >
+            {isKittyRevealCollapsed ? 'Show Kitty' : 'Hide Kitty'}
+          </button>
+        </div>
+        <p className="kitty-winner-note">
+          Last hand winner: {lastHandWinnerName ?? 'Unknown'} (takes the kitty)
+        </p>
+        {!isKittyRevealCollapsed ? (
+          <div className="round-kitty-cards">
+            {kittyRevealCards.map((card) => renderCardPill(card, false))}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
   const winningBidAmount = handState?.winningBid?.amount ?? biddingState?.highBid?.amount ?? null
   const bidLabelForSeat = (seat: SeatId) => {
     if (seat !== bidderSeat) return null
     return winningBidAmount ? `★ Bid ${winningBidAmount}` : '★ Bid'
+  }
+
+  const biddingIndicatorForSeat = (
+    seatId: SeatId,
+  ): { label: string; variant: 'bid' | 'pass' | 'pass-partner' } | null => {
+    if (activePhase !== 'bidding') return null
+    const seatIndex = seatOrder.indexOf(seatId)
+    if (seatIndex < 0) return null
+    const history = biddingState?.history ?? []
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      const entry = history[index]
+      if (entry.player !== seatIndex) continue
+      if (entry.type === 'bid') {
+        return { label: `Bid ${entry.amount ?? ''}`.trim(), variant: 'bid' }
+      }
+      if (entry.type === 'pass') {
+        return { label: 'Pass', variant: 'pass' }
+      }
+      if (entry.type === 'passPartner') {
+        return { label: 'Pass Partner', variant: 'pass-partner' }
+      }
+    }
+    return null
   }
 
   const renderTrickSeat = (seat: SeatId, positionClass: string) => {
@@ -1304,6 +1419,30 @@ function App() {
                     Trump: {formatTrumpLabel(currentTrump)}
                   </span>
                 ) : null}
+              </div>
+            </div>
+          ) : null}
+        </details>
+      </div>
+    )
+  }
+
+  const renderBiddingSeat = (seat: SeatId, positionClass: string) => {
+    const isTurn = currentPlayerSeat === seat
+    const biddingIndicator = biddingIndicatorForSeat(seat)
+
+    return (
+      <div className={`table-seat ${positionClass}${isTurn ? ' is-turn' : ''}`}>
+        <details className="table-seat-details" open>
+          <summary className="table-seat-summary">
+            <span className="table-seat-name">{getSeatDisplayName(seat)}</span>
+          </summary>
+          {biddingIndicator ? (
+            <div className="table-seat-meta">
+              <div className="table-seat-flags">
+                <span className={`seat-flag bidding-indicator ${biddingIndicator.variant}`}>
+                  {biddingIndicator.label}
+                </span>
               </div>
             </div>
           ) : null}
@@ -1348,31 +1487,6 @@ function App() {
 
   const renderSeatStrip = () => {
     const allowSeatPick = Boolean(roomState) && !mySeat
-    const biddingIndicatorForSeat = (
-      seatId: SeatId,
-    ): { label: string; variant: 'bidding' | 'bid' | 'pass' | 'pass-partner' } | null => {
-      if (activePhase !== 'bidding') return null
-      if (currentPlayerSeat === seatId) {
-        return { label: 'Bidding', variant: 'bidding' }
-      }
-      const seatIndex = seatOrder.indexOf(seatId)
-      if (seatIndex < 0) return null
-      const history = biddingState?.history ?? []
-      for (let index = history.length - 1; index >= 0; index -= 1) {
-        const entry = history[index]
-        if (entry.player !== seatIndex) continue
-        if (entry.type === 'bid') {
-          return { label: `Bid ${entry.amount ?? ''}`.trim(), variant: 'bid' }
-        }
-        if (entry.type === 'pass') {
-          return { label: 'Pass', variant: 'pass' }
-        }
-        if (entry.type === 'passPartner') {
-          return { label: 'Pass Partner', variant: 'pass-partner' }
-        }
-      }
-      return null
-    }
 
     return (
       <div className="seat-strip" aria-label="Table seats">
@@ -1544,14 +1658,29 @@ function App() {
       ) : null}
       {activePhase === 'trick' && playNotice ? (
         <div className="play-popover" role="alert">
-          <span>{playNotice.text}</span>
           <button
             type="button"
-            className="ghost play-popover-dismiss"
+            className="ghost play-popover-close"
+            aria-label="Close warning"
             onClick={() => setPlayNotice(null)}
           >
-            Dismiss
+            X
           </button>
+          {playNotice.suit ? (
+            <span>
+              You must follow suit. Since{' '}
+              <span className={`play-suit play-suit-${playNotice.suit}`}>
+                {COLOR_LABELS[playNotice.suit]}
+              </span>{' '}
+              was led and you have it, play a{' '}
+              <span className={`play-suit play-suit-${playNotice.suit}`}>
+                {COLOR_LABELS[playNotice.suit]}
+              </span>{' '}
+              card.
+            </span>
+          ) : (
+            <span>{playNotice.text}</span>
+          )}
         </div>
       ) : null}
       {entryMode ? (
@@ -1819,77 +1948,7 @@ function App() {
               </div>
             ) : null}
           </section>
-          {renderSeatStrip()}
-
           <section className="bidding-grid">
-            <div className={`bidding-card action-card${isMyBiddingActionTurn ? ' is-user-active' : ''}`}>
-              <p className="eyebrow">Your Action</p>
-              <div className="bidding-actions">
-                <button
-                  className="primary"
-                  onClick={() => emitBid(quickBidAmount)}
-                  disabled={!isMyTurn || quickBidAmount > maxBid}
-                >
-                  Bid +{bidIncrement} ({quickBidAmount})
-                </button>
-                <div className="bid-input-row">
-                  <input
-                    type="number"
-                    min={minBid}
-                    max={maxBid}
-                    step={bidStep}
-                    value={customBid}
-                    onChange={(event) => setCustomBid(event.target.value)}
-                    placeholder={`Custom (${minBid}-${maxBid})`}
-                  />
-                  <button
-                    className="ghost"
-                    onClick={handleCustomBid}
-                    disabled={!isMyTurn || !isCustomBidValid}
-                  >
-                    Bid
-                  </button>
-                </div>
-                <div className="bidding-secondary">
-                  <button className="ghost" onClick={emitPass} disabled={!isMyTurn}>
-                    Pass
-                  </button>
-                  <button
-                    className="ghost"
-                    onClick={emitPassPartner}
-                    disabled={!isMyTurn || !passPartnerAllowed}
-                  >
-                    Pass-Partner
-                  </button>
-                </div>
-
-                <div className="bidding-history-inline">
-                  <p className="meta-label">Bid History</p>
-                  <ul className="history-list">
-                    {(biddingState?.history?.length ?? 0) > 0 ? (
-                      biddingState?.history?.map((entry, index) => {
-                        const seatLabel = seatOrder[entry.player] ?? null
-                        const actionLabel =
-                          entry.type === 'bid'
-                            ? `Bid ${entry.amount}`
-                            : entry.type === 'pass'
-                              ? 'Pass'
-                              : 'Pass-Partner'
-                        return (
-                          <li key={`${entry.type}-${index}`}>
-                            <span>{seatLabel ? getSeatDisplayName(seatLabel) : 'Unknown seat'}</span>
-                            <span>{actionLabel}</span>
-                          </li>
-                        )
-                      })
-                    ) : (
-                      <li className="history-empty">No bids yet.</li>
-                    )}
-                  </ul>
-                </div>
-              </div>
-            </div>
-
             <div className={`bidding-card hand-card${isMyBiddingActionTurn ? ' is-user-active' : ''}`}>
               <div className="hand-header">
                 <p className="eyebrow">Your Hand</p>
@@ -1908,26 +1967,68 @@ function App() {
               )}
             </div>
 
-            {/* Bid History moved into Your Action */}
+            <div className={`bidding-card trick-card bidding-table-card${isMyBiddingActionTurn ? ' is-user-active' : ''}`}>
+              <p className="eyebrow">Table</p>
+              <div className="table-grid bidding-table-grid">
+                {renderBiddingSeat('T2P1', 'table-top')}
+                {renderBiddingSeat('T1P1', 'table-left')}
+
+                <div className="table-center bidding-table-center">
+                  <div className="bidding-table-actions">
+                    <div className="bidding-actions">
+                      <p className="bidding-phase-label">Bidding Phase</p>
+                      {myHasPassedInBidding ? (
+                        <p className="bidding-passed-indicator">You have passed for this hand.</p>
+                      ) : (
+                        <>
+                          <div className="bid-input-row">
+                            <input
+                              type="number"
+                              min={minBid}
+                              max={maxBid}
+                              step={bidStep}
+                              value={customBid === '' ? String(quickBidAmount) : customBid}
+                              onChange={(event) => setCustomBid(event.target.value)}
+                              placeholder={`Bid (${minBid}-${maxBid})`}
+                            />
+                            <button
+                              className="primary"
+                              onClick={handleCustomBid}
+                              disabled={!isMyTurn || !isCustomBidValid}
+                            >
+                              Bid
+                            </button>
+                          </div>
+                          <div className="bidding-secondary">
+                            <button className="ghost" onClick={emitPass} disabled={!isMyTurn}>
+                              Pass
+                            </button>
+                            {passPartnerAllowed ? (
+                              <button
+                                className="ghost"
+                                onClick={emitPassPartner}
+                                disabled={!isMyTurn}
+                              >
+                                Pass-Partner
+                              </button>
+                            ) : null}
+                          </div>
+                        </>
+                      )}
+
+                    </div>
+                  </div>
+                </div>
+
+                {renderBiddingSeat('T1P2', 'table-right')}
+                {renderBiddingSeat('T2P2', 'table-bottom')}
+              </div>
+            </div>
 
           </section>
         </main>
       ) : (
         <main className="hand">
-          {shouldShowScoreOverlay ? (
-            <div className="score-overlay" role="dialog" aria-modal="true">
-              <div className="score-overlay-modal">
-                <p className="eyebrow">Game Over</p>
-                <h2>Game Over</h2>
-                <p className="muted">Any player can reveal scores for everyone.</p>
-                <div className="entry-actions">
-                  <button className="primary" onClick={emitViewScores}>
-                    View Scores
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
           {errorMessage ? (
             <div className="error-banner" role="alert">
               {errorMessage}
@@ -1972,7 +2073,7 @@ function App() {
           ) : null}
 
           <section
-            className={`postbid-grid${activePhase === 'trick' ? ' is-trick' : ''}${
+            className={`postbid-grid${activePhase === 'trick' || showRoundEndReveal ? ' is-trick' : ''}${
               activePhase === 'kitty' ? ' is-kitty' : ''
             }${
               activePhase === 'declareTrump' ? ' is-declare' : ''
@@ -1982,6 +2083,7 @@ function App() {
               <div className="bidding-card summary-card">
                 <p className="eyebrow">{activePhase === 'gameOver' ? 'Final Scoreboard' : 'Scoreboard'}</p>
                 {renderScoreboardTable()}
+                {renderKittyRevealPanel()}
                 {activePhase === 'gameOver' && gameWinnerLabel ? (
                   <div className={`victory-banner team-${gameWinnerTeam === 0 ? 'one' : 'two'}`}>
                     <div className="victory-fireworks" aria-hidden="true">
@@ -2013,7 +2115,7 @@ function App() {
             ) : null}
             {/* Phase Info panel removed; key info now shown in the top header row. */}
 
-            {activePhase === 'trick' || activePhase === 'kitty' || activePhase === 'declareTrump' ? (
+            {activePhase === 'trick' || activePhase === 'kitty' || activePhase === 'declareTrump' || showRoundEndReveal ? (
               <div className="bidding-card trick-card">
                 <p className="eyebrow">Table</p>
 
@@ -2023,6 +2125,7 @@ function App() {
                     bySeat.set(play.seat, play.card)
                   }
                   const awaitingNextLead = trickPlays.length === 4
+                  const shouldHideCompletedTrickCards = activePhase === 'trick' && awaitingNextLead
                   const waitingWinnerSeat =
                     previousTurnSummary?.plays.find((play) => play.isWinner)?.seat ??
                     handState?.whoseTurnSeat ??
@@ -2030,6 +2133,7 @@ function App() {
                   const waitingWinnerLabel = waitingWinnerSeat
                     ? getSeatDisplayName(waitingWinnerSeat)
                     : null
+                  const showWinnerBanner = activePhase === 'trick' && awaitingNextLead && Boolean(waitingWinnerLabel)
                   const trickSpots: Array<{ seat: SeatId; className: string }> = [
                     { seat: 'T2P1', className: 'top' },
                     { seat: 'T1P1', className: 'left' },
@@ -2056,15 +2160,20 @@ function App() {
                                 className={`table-trick-spot ${spot.className}`}
                                 aria-label={`${spot.seat} played card`}
                               >
-                                {!awaitingNextLead && card ? renderCardPill(card, false) : null}
+                                {!shouldHideCompletedTrickCards && card ? renderCardPill(card, false) : null}
                               </div>
                             )
                           })}
                         </div>
-                        {awaitingNextLead && waitingWinnerLabel ? (
+                        {showWinnerBanner ? (
                           <p className="table-winner-banner">
                             <span className="table-winner-title">WINNER</span>
                             <span className="table-winner-name">{waitingWinnerLabel}</span>
+                          </p>
+                        ) : null}
+                        {showRoundEndReveal ? (
+                          <p className="table-winner-banner table-round-over-banner">
+                            <span className="table-winner-title">ROUND OVER</span>
                           </p>
                         ) : null}
                         {trickCards.length === 0 ? (
@@ -2077,7 +2186,13 @@ function App() {
                     </div>
                   )
                 })()}
-
+                {showRoundEndReveal ? (
+                  <div className="round-end-actions round-end-actions-desktop">
+                    <button className="primary" onClick={emitViewScores}>
+                      View Scores
+                    </button>
+                  </div>
+                ) : null}
                 {previousTurnSummary ? (
                   <div className="trick-result">
                     <div className="trick-result-head">
@@ -2104,7 +2219,6 @@ function App() {
                 ) : null}
               </div>
             ) : null}
-
             {activePhase !== 'score' && activePhase !== 'gameOver' ? (
               activePhase === 'preDeal' ? (
                 <div className={`bidding-card action-card${isMyPreDealActionTurn ? ' is-user-active' : ''}`}>
@@ -2162,6 +2276,7 @@ function App() {
               )
             ) : null}
 
+            {activePhase !== 'score' && activePhase !== 'gameOver' ? (
             <div className={`bidding-card hand-card${isMyHandActionTurn ? ' is-user-active' : ''}`}>
               <div className="hand-header">
                 <p className="eyebrow">Your Hand</p>
@@ -2229,9 +2344,18 @@ function App() {
                 <p className="empty-state">No cards yet.</p>
               )}
             </div>
+            ) : null}
 
             {/* Kitty is folded into the bidder hand; highlight kitty cards during kitty phase. */}
           </section>
+          {showRoundEndReveal ? renderKittyRevealPanel() : null}
+          {showRoundEndReveal ? (
+            <div className="round-end-actions-mobile-outside">
+              <button className="primary" onClick={emitViewScores}>
+                View Scores
+              </button>
+            </div>
+          ) : null}
         </main>
       )}
     </div>

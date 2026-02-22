@@ -1,0 +1,13 @@
+node_modules
+dist
+build
+coverage
+.vite
+.cache
+.git
+.gitignore
+*.log
+.env
+.env.*
+packages/rook-engine/test/*.js
+packages/rook-engine/test/*.d.ts
