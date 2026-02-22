@@ -72,6 +72,7 @@ export type GameState = {
   targetScore: number;
   winnerTeam: 0 | 1 | null;
   handHistory: HandHistoryEntry[];
+  lastKittyCards: Card[];
 };
 
 export type HandHistoryEntry = {
@@ -230,6 +231,7 @@ export const createGameState = (
       targetScore,
       winnerTeam: null,
       handHistory: [],
+      lastKittyCards: [],
     },
   };
 };
@@ -295,6 +297,7 @@ const createPreDealState = (
       targetScore,
       winnerTeam: null,
       handHistory: [],
+      lastKittyCards: [],
     },
   };
 };
@@ -346,6 +349,7 @@ const dealCurrentHand = (
       undoState: null,
     },
     winnerTeam: null,
+    lastKittyCards: [],
   };
 };
 
@@ -612,6 +616,7 @@ export class GameStore {
     const nextState: GameState = {
       ...state,
       phase: 'declareTrump',
+      lastKittyCards: cards.slice(),
       whoseTurnSeat: state.seatOrder[bidderIndex],
       whoseTurnPlayerId: state.playerOrder[bidderIndex],
       hand: {
@@ -926,6 +931,7 @@ export class GameStore {
     const nextState: GameState = {
       ...state,
       phase: 'preDeal',
+      lastKittyCards: [],
       dealerSeat,
       bidding,
       hand,

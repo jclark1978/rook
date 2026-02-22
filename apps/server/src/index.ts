@@ -134,6 +134,7 @@ const toHandPublicState = (state: GameState) => {
       state.seatOrder.map((seat, index) => [seat, state.hand.hands[index]?.length ?? 0]),
     ),
     kittyCount: state.hand.kitty.length,
+    kittyCards: state.lastKittyCards,
     kittySize: state.hand.kittySize,
     trickCards: state.hand.trickCards,
     handPoints: state.hand.handPoints,
