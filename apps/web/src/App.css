@@ -268,6 +268,36 @@ button.ready:hover {
   text-transform: uppercase;
 }
 
+.status-pill.version-easter {
+  position: relative;
+}
+
+.status-pill.version-easter::after {
+  content: attr(data-version);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.4rem);
+  transform: translate(-50%, 0.24rem);
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: rgba(10, 18, 30, 0.95);
+  color: #e5e7eb;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+  z-index: 15;
+}
+
+.status-pill.version-easter:hover::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .status-dot {
   width: 0.52rem;
   height: 0.52rem;

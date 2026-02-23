@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import rookCard from './assets/rook-card.jpg'
+import { APP_VERSION } from './version'
 import './App.css'
 
 type View = 'home' | 'lobby' | 'bidding' | 'hand'
@@ -1648,7 +1649,11 @@ function App() {
             <p className="brand-subtitle">Good friends, bad bids, great memories.</p>
           </div>
         </div>
-        <div className={`status-pill status-${connectionStatus}`}>
+        <div
+          className={`status-pill status-${connectionStatus} version-easter`}
+          data-version={APP_VERSION}
+          title={`Version ${APP_VERSION}`}
+        >
           <span className="status-dot" aria-hidden="true" />
           <span>{statusLabel}</span>
         </div>
@@ -1781,10 +1786,12 @@ function App() {
             <div>
               <h1>The Rook Room</h1>
               <p>
-                The Rook Room is a connected space where friends and family can create or join a
-                table, take their seats, and enjoy classic partner-based Rook. Form your teams,
-                play your hands, and compete for bragging rights in a fast, simple, and social
-                multiplayer experience built around the game you know and love.
+                The Rook Room brings the classic card game you grew up with into a modern,
+                connected space. Create a table, invite your friends and family, and settle in for
+                partner-based Rook just the way it was meant to be played. Build your teams,
+                outbid your opponents, and play each hand with strategy and confidence. It&apos;s
+                fast to join, simple to play, and built for the kind of friendly competition that
+                turns into lasting memories.
               </p>
             </div>
             <div className="hero-actions">
