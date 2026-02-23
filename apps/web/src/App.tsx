@@ -927,8 +927,6 @@ function App() {
 
   const gameScores = handState?.gameScores ?? gameState?.gameScores ?? null
   const gameWinnerTeam = handState?.winnerTeam ?? gameState?.winnerTeam ?? null
-  const gameWinnerLabel =
-    gameWinnerTeam === 0 ? 'Team 1' : gameWinnerTeam === 1 ? 'Team 2' : null
 
   const handHistory = handState?.handHistory ?? []
 
@@ -1255,6 +1253,22 @@ function App() {
 
   const teamOneHeader = getTeamHeaderLabel(['T1P1', 'T1P2'])
   const teamTwoHeader = getTeamHeaderLabel(['T2P1', 'T2P2'])
+  const winningTeamSeats =
+    gameWinnerTeam === 0
+      ? teamSeatGroups[0].seats
+      : gameWinnerTeam === 1
+        ? teamSeatGroups[1].seats
+        : []
+  const gameWinnerNamesLabel =
+    winningTeamSeats.length > 0
+      ? winningTeamSeats
+          .map((seatId) => {
+            const owner = roomState?.seats?.[seatId]
+            if (!owner) return getOpenSeatPlaceholder(seatId)
+            return getPlayerName(owner)
+          })
+          .join(' & ')
+      : null
   const shouldShowInlineScoreboard = activePhase !== 'score' && activePhase !== 'gameOver'
 
   const formatTrumpLabel = (trump: string | null) => {
@@ -2071,6 +2085,20 @@ function App() {
           {(activePhase === 'kitty' || activePhase === 'declareTrump') && !isBidder ? (
             <p className="phase-inline-message">{phaseStatus}</p>
           ) : null}
+          {activePhase === 'gameOver' && scoresRevealed && gameWinnerNamesLabel ? (
+            <div className={`victory-banner team-${gameWinnerTeam === 0 ? 'one' : 'two'}`}>
+              <div className="victory-fireworks" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+              <p className="victory-eyebrow">Game Over</p>
+              <h2>{`${gameWinnerNamesLabel.toUpperCase()} WON!`}</h2>
+            </div>
+          ) : null}
 
           <section
             className={`postbid-grid${activePhase === 'trick' || showRoundEndReveal ? ' is-trick' : ''}${
@@ -2084,20 +2112,6 @@ function App() {
                 <p className="eyebrow">{activePhase === 'gameOver' ? 'Final Scoreboard' : 'Scoreboard'}</p>
                 {renderScoreboardTable()}
                 {renderKittyRevealPanel()}
-                {activePhase === 'gameOver' && gameWinnerLabel ? (
-                  <div className={`victory-banner team-${gameWinnerTeam === 0 ? 'one' : 'two'}`}>
-                    <div className="victory-fireworks" aria-hidden="true">
-                      <span />
-                      <span />
-                      <span />
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                    <p className="victory-eyebrow">Game Over</p>
-                    <h2>{`${gameWinnerLabel.toUpperCase()} WON!`}</h2>
-                  </div>
-                ) : null}
                 {activePhase === 'score' ? (
                   <button
                     className="primary"
@@ -2108,7 +2122,7 @@ function App() {
                   </button>
                 ) : (
                   <p className="meta-value">
-                    Winner: {gameWinnerLabel ?? '—'}
+                    Winner: {gameWinnerNamesLabel ?? '—'}
                   </p>
                 )}
               </div>
